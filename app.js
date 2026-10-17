@@ -43,7 +43,7 @@ const shuf = a => { a = a.slice(); for (let i = a.length - 1; i > 0; i--) { cons
 const sleep = ms => new Promise(r => setTimeout(r, ms));
 
 /* ============ 状態 ============ */
-const S = { route: 'home', stack: [], lists: {}, src: 'itunes', q: '', sb: innerWidth > 1000, col: LS.get('col', {}), edit: false, tok: 0, lk: 0 };
+const S = { mode: LS.get('mode', 'sidebar'), tab: 'home', route: 'home', stack: [], lists: {}, src: 'itunes', q: '', sb: innerWidth > 1000, col: LS.get('col', {}), edit: false, tok: 0, lk: 0 };
 let playlists = LS.get('pl', []);
 let favs = new Set(LS.get('fav', []));
 let recent = LS.get('recent', []);
@@ -413,12 +413,13 @@ function render() {
 const NAV = [['search', 'search', 'search'], ['home', 'house', 'home'], ['new', 'grid', 'new'], ['radio', 'radio', 'radio']];
 const LIBN = [['recent', 'clock', 'recentAdded'], ['artists', 'mic', 'artists'], ['albums', 'stack', 'albums'], ['songs', 'note', 'songs'], ['uploads', 'download', 'uploaded']];
 function renderSidebar() {
+  renderTop();
   const ni = (r, icon, label, extra = '') => `<button class="ni${S.route === r ? ' on' : ''}" data-act="go" data-r="${r}">${ic(icon)}<span>${esc(label)}</span>${extra}</button>`;
   const grp = (id, label, body) => `<button class="sg${S.col[id] ? ' c' : ''}" data-act="col" data-id="${id}"><span>${label}</span>${ic('chevd')}</button><div class="sgc${S.col[id] ? ' c' : ''}"><div>${body}</div></div>`;
   const pinHTML = pins.length ? pins.map((p, i) => `<button class="ni${S.route === p.r ? ' on' : ''}" data-act="${S.edit ? 'unpin' : 'go'}" data-r="${esc(p.r)}" data-i="${i}">${S.edit ? `<span class="rm">${ic('xmark')}</span>` : ic(p.r === 'fav' ? 'star' : p.r.startsWith('pl') || p.r.startsWith('folder') ? 'plnote' : 'stack')}<span>${esc(p.name)}</span></button>`).join('') : `<div style="padding:4px 14px 8px"><small>${ja ? 'プレイリストやアルバムのメニューからピン留め' : 'Pin from a playlist or album menu'}</small></div>`;
   const pl = playlists.filter(p => !p.parent).map(p => ni((p.folder ? 'folder:' : 'pl:') + p.id, p.folder ? 'folder' : 'plnote', p.name)).join('');
   $('#sidebar').innerHTML = `
-    <div class="sbh"><button class="pillbtn" data-act="edit">${S.edit ? t('done') : t('edit')}</button><button class="ib round" style="background:rgba(255,255,255,.5);font-size:21px" data-act="sidebar">${ic('sidebar')}</button></div>
+    <div class="sbh"><button class="pillbtn" data-act="edit">${S.edit ? t('done') : t('edit')}</button><button class="ib round" style="background:rgba(255,255,255,.5);font-size:21px" data-act="mode" data-m="tabs" aria-label="Tab bar">${ic('tabbar')}</button></div>
     <div class="sbscroll">${NAV.map(([r, i, l]) => ni(r, i, t(l))).join('')}
       ${grp('lib', t('library'), grp('pins', t('pins'), pinHTML) + LIBN.map(([r, i, l]) => ni(r, i, t(l))).join(''))}
       ${grp('pls', t('playlists'), ni('playlists', 'grid', t('allPl')) + ni('fav', 'star', t('fav')) + pl)}
@@ -569,6 +570,10 @@ document.addEventListener('click', async e => {
     case 'play': { const l = S.lists[d.l]; if (l) { if (cur() && l[+d.i].id === cur().id) toggle(); else play(l, +d.i); } break; }
     case 'more': openTrackMenu(a, rect.left - 200, rect.bottom + 4); break;
     case 'playall': { const l = S.lists[d.l]; if (l && l.length) { P.shuffle = !!d.sh; play(d.sh ? shuf(l) : l, 0); } break; }
+    case 'mode': S.mode = d.m; applyMode(); break;
+    case 'tplay': playLib(false); break;
+    case 'tshuf': playLib(true); break;
+    case 'tmore': menu(rect.right - 250, rect.bottom + 8, [{ label: t('upload'), icon: 'upload', act: () => $('#file').click() }, { label: t('addUrl'), icon: 'link', act: () => document.querySelector('[data-act=addurl]') ? document.querySelector('[data-act=addurl]').click() : (go('songs')) }, '-', { label: ja ? 'サイドバーに切り替え' : 'Switch to Sidebar', icon: 'sidebar', act: () => { S.mode = 'sidebar'; applyMode(); } }]); break;
     case 'sidebar': setSB(!S.sb); break;
     case 'col': S.col[d.id] = !S.col[d.id]; saveAll(); renderSidebar(); break;
     case 'edit': S.edit = !S.edit; renderSidebar(); break;
@@ -597,9 +602,96 @@ document.addEventListener('pointerout', e => { const g = e.target.closest && e.t
 document.addEventListener('keydown', e => { if (e.target.tagName === 'INPUT') return; if (e.code === 'Space') { e.preventDefault(); toggle(); } else if (e.code === 'ArrowRight') next(); else if (e.code === 'ArrowLeft') prev(); });
 $('#sbopen').innerHTML = ic('sidebar');
 
+/* ============ 上部タブバー + ガラスレンズ ============ */
+const TABS = [['home', 'home'], ['new', 'new'], ['radio', 'radio'], ['lib', 'library'], ['pls', 'playlists']];
+const TABROUTE = { home: 'home', new: 'new', radio: 'radio', lib: 'songs', pls: 'playlists', search: 'search' };
+const LIBR = ['recent', 'artists', 'albums', 'songs', 'uploads', 'lalbum', 'lartist'];
+const PLR = ['playlists', 'fav', 'pl', 'folder'];
+const tabOf = r => { const k = r.split(':')[0]; if (['home', 'new', 'radio', 'search'].includes(k)) return k; if (LIBR.includes(k)) return 'lib'; if (PLR.includes(k)) return 'pls'; return null; };
+function playLib(sh) {
+  const l = allSongs().sort((a, b) => a.title.localeCompare(b.title, ja ? 'ja' : 'en'));
+  if (!l.length) return toast(t('noSongs').replace(/<br>/g, ' '));
+  P.shuffle = sh; play(sh ? shuf(l) : l, 0);
+}
+function buildTop() {
+  $('#topbar').innerHTML = `<div class="tbar glass"><button class="tbi" data-act="mode" data-m="sidebar" aria-label="Sidebar">${ic('sidebar')}</button>
+    <div class="tbtabs"><i class="tbpill"></i>${TABS.map(([id, l]) => `<button class="tbt" data-tab="${id}">${t(l)}</button>`).join('')}<div class="tblens"></div></div>
+    <button class="tbi" data-tab="search" aria-label="Search">${ic('search')}</button></div>
+    <div class="tright"><button class="ib glass" data-act="tplay" aria-label="Play">${ic('play')}</button><button class="ib glass" data-act="tshuf" aria-label="Shuffle">${ic('shuffle')}</button><button class="ib glass" data-act="tmore" aria-label="More">${ic('ellipsis')}</button></div>`;
+}
+function placePill(root, btn) { root.style.setProperty('--px', btn.offsetLeft + 'px'); root.style.setProperty('--pw', btn.offsetWidth + 'px'); }
+function renderTop() {
+  const tp = $('#topbar'); if (!tp.firstChild) buildTop();
+  const k = tabOf(S.route); if (k) S.tab = k;
+  $$('.tbt', tp).forEach(b => b.classList.toggle('on', b.dataset.tab === S.tab));
+  $('.tbi[data-tab=search]', tp).classList.toggle('on', S.tab === 'search');
+  const on = $('.tbt.on', tp), root = $('.tbtabs', tp);
+  root.style.setProperty('--po', on ? 1 : 0);
+  if (on) requestAnimationFrame(() => placePill(root, on));
+}
+function applyMode(init) {
+  const tabs = S.mode === 'tabs';
+  document.body.classList.toggle('tabs', tabs);
+  if (tabs) setSB(false); else setSB(init ? innerWidth > 1000 : true);
+  LS.set('mode', S.mode); renderTop(); renderSidebar();
+  requestAnimationFrame(() => requestAnimationFrame(renderTop));
+}
+addEventListener('resize', () => renderTop());
+(function lensInit() {
+  const tp = $('#topbar'); let timer = null, start = null, lensOn = false, hov = null, guard = false, pid = null;
+  const root = () => $('.tbtabs', tp), lens = () => $('.tblens', tp);
+  tp.addEventListener('click', e => {
+    const b = e.target.closest('[data-tab]'); if (!b || guard || lensOn) return;
+    go(TABROUTE[b.dataset.tab]);
+  });
+  tp.addEventListener('contextmenu', e => e.preventDefault());
+  tp.addEventListener('pointerdown', e => {
+    const b = e.target.closest('.tbt.on'); if (!b) return;
+    start = { x: e.clientX, y: e.clientY }; pid = e.pointerId; root().classList.add('press');
+    timer = setTimeout(() => openLens(e.clientX), 320);
+  });
+  tp.addEventListener('pointermove', e => {
+    if (!start) return;
+    if (!lensOn) { if (Math.hypot(e.clientX - start.x, e.clientY - start.y) > 10) { clearTimeout(timer); start = null; root().classList.remove('press'); } return; }
+    moveLens(e.clientX);
+  });
+  const end = () => { clearTimeout(timer); if (root()) root().classList.remove('press'); if (lensOn) closeLens(); start = null; };
+  tp.addEventListener('pointerup', end); tp.addEventListener('pointercancel', end);
+  function openLens(x) {
+    const r = root(), l = lens(), active = $('.tbt.on', r); if (!active) return;
+    lensOn = true; hov = active.dataset.tab; try { tp.setPointerCapture(pid); } catch {}
+    const clone = r.cloneNode(true); clone.classList.add('lensc'); clone.classList.remove('press');
+    $('.tblens', clone).remove(); clone.style.width = r.offsetWidth + 'px';
+    l.replaceChildren(clone);
+    l.style.width = (active.offsetWidth + 18) + 'px';
+    moveLens(x, true);
+    requestAnimationFrame(() => l.classList.add('on'));
+    r.classList.remove('press'); r.classList.add('lensing');
+    if (navigator.vibrate) navigator.vibrate(10);
+  }
+  function moveLens(x) {
+    const r = root(), l = lens(), rect = r.getBoundingClientRect(), w = l.offsetWidth;
+    const cx = Math.max(w / 2 - 6, Math.min(x - rect.left, rect.width - w / 2 + 6));
+    const left = cx - w / 2; l.style.left = left + 'px';
+    const clone = $('.lensc', l); if (!clone) return; clone.style.left = (-left) + 'px';
+    const btn = $$('.tbt', r).find(b => cx >= b.offsetLeft && cx <= b.offsetLeft + b.offsetWidth) || $$('.tbt', r).pop();
+    if (btn.dataset.tab !== hov) { hov = btn.dataset.tab; if (navigator.vibrate) navigator.vibrate(6); }
+    placePill(r, btn); r.style.setProperty('--po', 1);
+    $$('.tbt', clone).forEach(b => b.classList.toggle('on', b.dataset.tab === hov));
+    const cb = $$('.tbt', clone).find(b => b.dataset.tab === hov); if (cb) placePill(clone, cb);
+  }
+  function closeLens() {
+    const r = root(), l = lens(); lensOn = false; guard = true; setTimeout(() => guard = false, 80);
+    const target = hov; l.classList.remove('on'); r.classList.remove('lensing');
+    if (target && target !== S.tab) go(TABROUTE[target]); else renderTop();
+    setTimeout(() => { if (!lensOn) l.replaceChildren(); }, 400);
+  }
+})();
+
 /* ============ 起動 ============ */
 (async function init() {
   setSB(S.sb);
+  buildTop(); applyMode(true);
   await idb.init();
   (await idb.all()).forEach(x => lib.set(x.id, x));
   renderSidebar(); render(); ui();
