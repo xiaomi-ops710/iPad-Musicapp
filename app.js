@@ -5,7 +5,7 @@ const $$ = (s, r = document) => [...r.querySelectorAll(s)];
 const ja = (navigator.language || '').toLowerCase().startsWith('ja');
 const T = {
   search: ['検索', 'Search'], home: ['ホーム', 'Home'], new: ['新着', 'New'], radio: ['ラジオ', 'Radio'],
-  library: ['ライブラリ', 'Library'], pins: ['ピン', 'Pins'], recentAdded: ['最近追加した項目', 'Recently Added'],
+  library: ['ライブラリ', 'Library'], pins: ['ピン', 'Pins'], recentAdded: ['最近追加した項目', 'Recently Added'], topPlayed: ['よく再生した項目', 'Most Played'], heavy: ['ヘビーローテーション', 'Heavy Rotation'], hist: ['最近の検索', 'Recent Searches'], clear: ['消去', 'Clear'],
   artists: ['アーティスト', 'Artists'], albums: ['アルバム', 'Albums'], songs: ['曲', 'Songs'],
   uploaded: ['アップロード済み', 'Uploaded'], playlists: ['プレイリスト', 'Playlists'], allPl: ['すべてのプレイリスト', 'All Playlists'],
   fav: ['お気に入りの曲', 'Favorite Songs'], edit: ['編集', 'Edit'], done: ['完了', 'Done'],
@@ -47,6 +47,8 @@ const S = { mode: LS.get('mode', 'sidebar'), tab: 'home', route: 'home', stack: 
 let playlists = LS.get('pl', []);
 let favs = new Set(LS.get('fav', []));
 let recent = LS.get('recent', []);
+let cnt = LS.get('cnt', {}); let shist = LS.get('shist', []);
+const topTracks = n => Object.entries(cnt).sort((a, b) => b[1] - a[1]).map(([id]) => { const m = recent.find(r => r.id === id); return m ? unslim(m) : lib.get(id); }).filter(Boolean).slice(0, n);
 let pins = LS.get('pins', []);
 let uname = LS.get('name', '');
 const lib = new Map();
@@ -72,9 +74,9 @@ const cov = (tr, cls = '') => {
   return u ? `<div class="cov ${cls}" style="background-image:url('${esc(u)}')"></div>`
     : `<div class="cov ${cls} gen" style="--h:${hue((tr && (tr.album || tr.title)) || 'x')}">${ic('note')}</div>`;
 };
-const slim = tr => tr.blob ? { id: tr.id, local: 1 } : { id: tr.id, title: tr.title, artist: tr.artist, album: tr.album, art: typeof tr.art === 'string' ? tr.art : null, url: tr.url, src: tr.src, dur: tr.dur };
+const slim = tr => tr.blob ? { id: tr.id, local: 1 } : { id: tr.id, title: tr.title, artist: tr.artist, album: tr.album, art: typeof tr.art === 'string' ? tr.art : null, url: tr.url, src: tr.src, dur: tr.dur, cid: tr.cid };
 const unslim = m => m.local ? lib.get(m.id) : m;
-const fromIt = r => ({ id: 'it' + r.trackId, title: r.trackName, artist: r.artistName, album: r.collectionName || '', dur: 0, url: r.previewUrl, art: (r.artworkUrl100 || '').replace('100x100', '600x600') || null, src: 'itunes' });
+const fromIt = r => ({ id: 'it' + r.trackId, title: r.trackName, artist: r.artistName, album: r.collectionName || '', dur: 0, url: r.previewUrl, art: (r.artworkUrl100 || '').replace('100x100', '600x600') || null, src: 'itunes', cid: r.collectionId });
 const AUD = 'https://api.audius.co/v1';
 const APP = 'ipad_music_pwa';
 const fromAu = r => ({ id: 'au' + r.id, title: r.title, artist: r.user && r.user.name || '', album: r.genre || '', dur: r.duration || 0, url: `${AUD}/tracks/${r.id}/stream?app_name=${APP}`, art: r.artwork && (r.artwork['480x480'] || r.artwork['1000x1000'] || r.artwork['150x150']) || null, src: 'audius' });
@@ -216,7 +218,8 @@ function play(list, i) { P.q = list.slice(); P.i = i; P.hist = []; load(); }
 function load() {
   const tr = cur(); if (!tr) return;
   au.src = audioUrl(tr); au.play().catch(() => {});
-  recent = [slim(tr), ...recent.filter(m => m.id !== tr.id)].slice(0, 30); LS.set('recent', recent);
+  recent = [slim(tr), ...recent.filter(m => m.id !== tr.id)].slice(0, 60); LS.set('recent', recent);
+  cnt[tr.id] = (cnt[tr.id] || 0) + 1; LS.set('cnt', cnt);
   sess(tr); ui();
 }
 function toggle() { if (!cur()) return; au.paused ? au.play().catch(() => {}) : au.pause(); }
@@ -226,6 +229,7 @@ function next(auto) {
   if (P.shuffle && P.q.length > 1) { P.hist.push(P.i); let j; do j = Math.random() * P.q.length | 0; while (j === P.i); P.i = j; }
   else if (P.i + 1 < P.q.length) { P.hist.push(P.i); P.i++; }
   else if (P.repeat === 1) { P.hist.push(P.i); P.i = 0; }
+  else if (auto && P.auto && !P.fetching) { P.fetching = 1; const c = cur(); auSearch(c.artist, 12).then(l => { const have = new Set(P.q.map(x => x.id)); l = l.filter(x => !have.has(x.id)); if (l.length) { P.q.push(...l); P.hist.push(P.i); P.i++; load(); } else { au.pause(); ui(); } }).catch(() => { au.pause(); ui(); }).finally(() => P.fetching = 0); return; }
   else { au.pause(); au.currentTime = 0; ui(); return; }
   load();
 }
@@ -267,7 +271,7 @@ np.innerHTML = `
   <div class="npbg"></div><div class="npgrab" data-n="close"></div>
   <div class="npbody"><div class="npstage"><div class="npart"></div><div class="nppanel"></div></div>
   <div class="npctl">
-    <div class="nptitle"><div><b id="npt"></b><small id="npa"></small></div>
+    <div class="nptitle"><div><b id="npt"></b><small id="npa" data-n="artist" style="cursor:pointer"></small></div>
       <button class="ib glass fav" data-n="fav">${ic('star')}</button><button class="ib glass" data-n="more">${ic('ellipsis')}</button></div>
     <input type="range" id="seek" min="0" max="1000" value="0" style="margin-top:14px">
     <div class="times"><span id="tc">0:00</span><span id="npfmt"></span><span id="tr">-0:00</span></div>
@@ -286,11 +290,36 @@ setP(vol, 100);
 
 function tick() {
   lyricSync();
+  preNext(); saveResume();
   const d = au.duration, c = au.currentTime;
   const p = isFinite(d) && d > 0 ? c / d : 0;
   mini.querySelector('.prog i').style.setProperty('--p', p * 100 + '%');
   if (!seeking) { seek.value = p * 1000; setP(seek, p * 100); $('#tc').textContent = fmt(c); $('#tr').textContent = '-' + fmt((isFinite(d) ? d : 0) - c); }
 }
+let preFor = null, preA = null, lastSave = 0;
+function preNext() {
+  const d = au.duration; if (!isFinite(d) || d - au.currentTime > 20 || P.shuffle) return;
+  const n = P.q[P.i + 1]; if (!n || n.blob || preFor === n.id) return;
+  preFor = n.id; try { preA = new Audio(); preA.preload = 'auto'; preA.src = audioUrl(n); } catch {}
+}
+function saveResume() {
+  const now = Date.now(); if (now - lastSave < 4000 || !cur()) return; lastSave = now;
+  try { LS.set('resume', { q: P.q.slice(0, 80).map(slim), i: Math.min(P.i, 79), t: au.currentTime }); } catch {}
+}
+function restoreResume() {
+  const r = LS.get('resume', null); if (!r || !r.q) return;
+  const q = r.q.map(unslim).filter(Boolean); if (!q.length || !q[r.i]) return;
+  P.q = q; P.i = r.i; const tr = cur();
+  au.src = audioUrl(tr); au.addEventListener('loadedmetadata', () => { try { au.currentTime = r.t || 0; } catch {} }, { once: true });
+  sess(tr); ui();
+}
+document.addEventListener('keydown', e => {
+  if (/INPUT|TEXTAREA/.test(document.activeElement && document.activeElement.tagName)) return;
+  if (e.code === 'Space') { e.preventDefault(); toggle(); }
+  else if (e.shiftKey && e.key === 'ArrowRight') next();
+  else if (e.shiftKey && e.key === 'ArrowLeft') prev();
+});
+if ('webkitCurrentPlaybackTargetIsWireless' in au) au.addEventListener('webkitcurrentplaybacktargetiswirelesschanged', () => { const s = $('[data-n=route] small', np); if (s) s.textContent = au.webkitCurrentPlaybackTargetIsWireless ? 'AirPlay' : (ja ? 'このデバイス' : 'This Device'); });
 function ui() {
   const tr = cur(), playing = !au.paused && !!tr;
   const pi = ic(playing ? 'pause' : 'play');
@@ -365,7 +394,8 @@ np.addEventListener('click', e => {
   if (k === 'close') closeNP(); else if (k === 'lyrics' || k === 'queue') npMode(k);
   else if (k === 'fav') { const tr = cur(); if (tr) toggleFav(tr); }
   else if (k === 'more') { if (cur()) { const r = b.getBoundingClientRect(); trackMenu(cur(), r.right - 240, r.bottom + 6, null, true); } }
-  else if (k === 'route') toast(ja ? 'このデバイスで再生中' : 'Playing on this device');
+  else if (k === 'route') { if (au.webkitShowPlaybackTargetPicker) au.webkitShowPlaybackTargetPicker(); else toast(ja ? 'AirPlayはSafariでのみ利用できます' : 'AirPlay is available in Safari only'); }
+  else if (k === 'artist') { const tr = cur(); if (tr && tr.artist) { closeNP(); go('iartist:' + tr.artist); } }
   else ctl(k);
 });
 async function toggleFav(tr) {
@@ -416,7 +446,7 @@ function rows(list, o = {}) {
   const k = reg(list), c = cur();
   return `<div class="tl">${list.map((tr, i) => rowHTML(tr, i, k, { ...o, cur: c && c.id === tr.id })).join('')}</div>`;
 }
-const head = (title, right = '', back) => `<header class="ph"><div style="display:flex;align-items:center">${back ? `<button class="ib backb" data-act="back">${ic('chevl')}</button>` : ''}<h1>${esc(title)}</h1></div><div class="pha">${right}</div></header>`;
+const head = (title, right = '', back) => `<header class="ph"><div style="display:flex;align-items:center">${back ? `<button class="ib backb" data-act="back">${ic('chevl')}</button>` : ''}<h1>${esc(title)}</h1></div><div class="pha">${right}<button class="pav" data-act="settings" aria-label="Profile">${ic('person')}</button></div></header>`;
 const spinner = '<div class="ctr"><div class="spin"></div></div>';
 const tile = (img, title, sub, attrs, tr) => `<div class="tile" ${attrs}>${img ? `<div class="cov" style="background-image:url('${esc(img)}')"></div>` : cov(tr)}<b>${esc(title)}</b><small>${esc(sub || '')}</small></div>`;
 const albumTile = r => tile((r.artworkUrl100 || '').replace('100x100', '400x400'), r.collectionName, r.artistName, `data-act="go" data-r="ialbum:${r.collectionId}"`);
@@ -434,11 +464,14 @@ function trackMenu(tr, x, y, list, fromPlayer) {
     { label: isFav ? t('rmFav') : t('addFav'), icon: isFav ? 'starfill' : 'star', act: () => toggleFav(r) },
     { label: t('addPl'), icon: 'plnote', sub: playlists.filter(p => !p.folder).map(p => ({ label: p.name, icon: 'plnote', act: async () => { await addToLib(r, true); p.songs = p.songs || []; if (!p.songs.includes(r.id)) p.songs.push(r.id); saveAll(); toast(t('added')); } })).concat([{ label: t('newPl'), icon: 'plus', act: async () => { const n = await ask(t('newPl'), t('plName')); if (n) { await addToLib(r, true); playlists.push({ id: uid('pl'), name: n, songs: [r.id] }); saveAll(); renderSidebar(); toast(t('added')); } } }]) },
   ];
+  items.push('-', { label: ja ? 'アーティストに移動' : 'Go to Artist', icon: 'person2', act: () => { if (fromPlayer) closeNP(); go('iartist:' + r.artist); } });
+  if (r.cid) items.push({ label: ja ? 'アルバムに移動' : 'Go to Album', icon: 'stack', act: () => { if (fromPlayer) closeNP(); go('ialbum:' + r.cid); } });
+  items.push({ label: ja ? '共有…' : 'Share…', icon: 'share', act: () => doShare(r.title, r.title + ' - ' + r.artist, shareUrl(r)) });
   if (!inl) items.push({ label: t('addLib'), icon: 'plus', act: () => addToLib(r) });
   else items.push({ label: t('rmLib'), icon: 'trash', danger: true, act: async () => { await removeFromLib(r.id); render(); } });
   const m = /^pl:(.+)$/.exec(S.route);
   if (m && !fromPlayer) { const p = playlists.find(p => p.id === m[1]); if (p) items.push({ label: t('rmPl'), icon: 'xmark', act: () => { p.songs = p.songs.filter(id => id !== r.id); saveAll(); render(); } }); }
-  if (fromPlayer) items.push('-', speedItem(), sleepItem(), glassItem(), settingsItem());
+  if (fromPlayer) items.push('-', { label: ja ? '自動再生' + (P.auto ? '：オン' : '：オフ') : 'Autoplay' + (P.auto ? ': On' : ': Off'), icon: 'infinity', act: () => { P.auto = !P.auto; toast(P.auto ? (ja ? '自動再生をオンにしました' : 'Autoplay on') : (ja ? '自動再生をオフにしました' : 'Autoplay off')); } }, speedItem(), sleepItem(), glassItem(), settingsItem());
   menu(x, y, items);
 }
 
@@ -457,21 +490,38 @@ function render() {
   S.lists = {}; S.lk = 0; S.tok++;
   const el = document.createElement('div'); el.className = 'page'; main.replaceChildren(el);
   const [k, arg] = S.route.split(/:(.*)/s);
-  const fn = { home: vHome, search: vSearch, new: vNew, radio: vRadio, recent: vRecentAdded, artists: vArtists, albums: vAlbums, songs: vSongs, uploads: vUploads, playlists: vPlaylists, fav: vFav, pl: vPl, folder: vFolder, ialbum: vIAlbum, iaitem: vIAItem, lalbum: vLAlbum, lartist: vLArtist }[k] || vHome;
+  const fn = { home: vHome, search: vSearch, new: vNew, radio: vRadio, iartist: vIArtist, library: vLibrary, recent: vRecentAdded, top: vTop, artists: vArtists, albums: vAlbums, songs: vSongs, uploads: vUploads, playlists: vPlaylists, fav: vFav, pl: vPl, folder: vFolder, ialbum: vIAlbum, iaitem: vIAItem, lalbum: vLAlbum, lartist: vLArtist }[k] || vHome;
   fn(el, arg, S.tok);
 }
 
 /* ============ サイドバー ============ */
 const NAV = [['search', 'search', 'search'], ['home', 'house', 'home'], ['new', 'grid', 'new'], ['radio', 'radio', 'radio']];
-const LIBN = [['recent', 'clock', 'recentAdded'], ['artists', 'mic', 'artists'], ['albums', 'stack', 'albums'], ['songs', 'note', 'songs'], ['uploads', 'download', 'uploaded']];
+const LIBN = [['recent', 'clock', 'recentAdded'], ['top', 'flame', 'topPlayed'], ['artists', 'mic', 'artists'], ['albums', 'stack', 'albums'], ['songs', 'note', 'songs'], ['uploads', 'download', 'uploaded']];
+const PT = [['home', 'house', 'home'], ['new', 'grid', 'new'], ['radio', 'radio', 'radio'], ['library', 'library', 'library']];
+const isPhone = () => /iPhone|iPod/.test(navigator.userAgent) || innerWidth <= 700;
+function vLibrary(el) {
+  el.innerHTML = head(t('library')) + `<div class="tl libl">${LIBN.map(([r, i, l]) => `<div class="tr" data-act="go" data-r="${r}"><span class="lic">${ic(i)}</span><div class="ti"><b>${t(l)}</b></div>${ic('chevr')}</div>`).join('')}<div class="tr" data-act="go" data-r="playlists"><span class="lic">${ic('grid')}</span><div class="ti"><b>${t('allPl')}</b></div>${ic('chevr')}</div><div class="tr" data-act="go" data-r="fav"><span class="lic">${ic('star')}</span><div class="ti"><b>${t('fav')}</b></div>${ic('chevr')}</div></div>`;
+}
+function renderPhone() {
+  const el = $('#ptab'); if (!el) return;
+  const k = S.route.split(':')[0], act = k === 'search' ? 'search' : LIBR.includes(k) || PLR.includes(k) ? 'library' : k;
+  el.innerHTML = `<div class="pt glass"><i class="ptsel"></i>${PT.map(([r, i, l]) => `<button class="${act === r ? 'on' : ''}" data-act="go" data-r="${r}">${ic(i)}<span>${t(l)}</span></button>`).join('')}</div><button class="ps glass${act === 'search' ? ' on' : ''}" data-act="go" data-r="search" aria-label="Search">${ic('search')}</button>`;
+  const on = $('.pt button.on', el), sel = $('.ptsel', el);
+  if (on && sel) { sel.style.opacity = 1; sel.style.transform = `translateX(${on.offsetLeft}px)`; sel.style.width = on.offsetWidth + 'px'; } else if (sel) sel.style.opacity = 0;
+}
+function applyPhone() {
+  const p = isPhone(); document.body.classList.toggle('phone', p);
+  if (p) { setSB(false); renderPhone(); rfSizes(); rfKick(600); }
+}
+addEventListener('resize', () => { applyPhone(); });
 function renderSidebar() {
-  renderTop();
+  renderTop(); renderPhone();
   const ni = (r, icon, label, extra = '') => `<button class="ni${S.route === r ? ' on' : ''}" data-act="go" data-r="${r}">${ic(icon)}<span>${esc(label)}</span>${extra}</button>`;
   const grp = (id, label, body) => `<button class="sg${S.col[id] ? ' c' : ''}" data-act="col" data-id="${id}"><span>${label}</span>${ic('chevd')}</button><div class="sgc${S.col[id] ? ' c' : ''}"><div>${body}</div></div>`;
   const pinHTML = pins.length ? pins.map((p, i) => `<button class="ni${S.route === p.r ? ' on' : ''}" data-act="${S.edit ? 'unpin' : 'go'}" data-r="${esc(p.r)}" data-i="${i}">${S.edit ? `<span class="rm">${ic('xmark')}</span>` : ic(p.r === 'fav' ? 'star' : p.r.startsWith('pl') || p.r.startsWith('folder') ? 'plnote' : 'stack')}<span>${esc(p.name)}</span></button>`).join('') : `<div style="padding:4px 14px 8px"><small>${ja ? 'プレイリストやアルバムのメニューからピン留め' : 'Pin from a playlist or album menu'}</small></div>`;
   const pl = playlists.filter(p => !p.parent).map(p => ni((p.folder ? 'folder:' : 'pl:') + p.id, p.folder ? 'folder' : 'plnote', p.name)).join('');
   $('#sidebar').innerHTML = `
-    <div class="sbh"><button class="pillbtn" data-act="edit">${S.edit ? t('done') : t('edit')}</button><button class="ib round" style="background:rgba(255,255,255,.5);font-size:21px" data-act="mode" data-m="tabs" aria-label="Tab bar">${ic('tabbar')}</button></div>
+    <div class="sbh"><button class="ib round" style="background:rgba(255,255,255,.5);font-size:21px" data-act="mode" data-m="tabs" aria-label="Tab bar">${ic('tabbar')}</button></div>
     <div class="sbscroll">${NAV.map(([r, i, l]) => ni(r, i, t(l))).join('')}
       ${grp('lib', t('library'), grp('pins', t('pins'), pinHTML) + LIBN.map(([r, i, l]) => ni(r, i, t(l))).join(''))}
       ${grp('pls', t('playlists'), ni('playlists', 'grid', t('allPl')) + ni('fav', 'star', t('fav')) + pl)}
@@ -485,9 +535,11 @@ async function vHome(el, _, tok) {
   const station = `<div class="pick station" data-act="station" data-term="__mix"><svg class="art" viewBox="0 0 100 133" preserveAspectRatio="xMidYMid slice"><polygon points="-6,6 62,66 -6,126" fill="#ffb11f"/><polygon points="6,28 42,66 6,104" fill="#ff7a1a"/><polygon points="14,44 28,66 14,88" fill="#ff4d2e"/></svg><small>${t('madeFor')}</small><b>${esc(nm)}${t('station')}</b></div>`;
   const mood = `<div class="pick mood" data-act="station" data-term="${ja ? 'リラックス' : 'relax chill'}"><svg class="art" viewBox="0 0 100 133" preserveAspectRatio="xMidYMid slice"><g fill="none" stroke="#fff" stroke-width="1.4" opacity=".9"><ellipse cx="55" cy="26" rx="22" ry="9"/><ellipse cx="50" cy="50" rx="36" ry="14"/><ellipse cx="46" cy="82" rx="44" ry="20"/></g></svg><small>${t('moodFor')}</small><b>${t('relax')}</b><p>${t('relaxD')}</p></div>`;
   el.innerHTML = head(t('home')) + `<h2>${t('topPicks')}</h2><div class="hs" id="picks">${station}${mood}</div>
-    <h2>${t('recent')} ${ic('chevr')}</h2><div id="rec"></div><div id="charts"></div><div id="trend"></div>`;
+    <h2>${t('recent')} ${ic('chevr')}</h2><div id="rec"></div><div id="heavy"></div><div id="charts"></div><div id="trend"></div>`;
   const rl = recent.map(unslim).filter(Boolean).slice(0, 14);
   $('#rec', el).innerHTML = rl.length ? `<div class="hs">${rl.map((tr, i) => { const k = reg(rl); return tile(null, tr.title, tr.artist, `data-act="play" data-l="${k}" data-i="${i}"`, tr); }).join('')}</div>` : `<small>${t('noRecent')}</small>`;
+  const hv = topTracks(14).filter(x => cnt[x.id] > 1);
+  if (hv.length) { const k = reg(hv); $('#heavy', el).innerHTML = `<h2>${t('heavy')} ${ic('chevr')}</h2><div class="hs">${hv.map((x, i) => tile(null, x.title, x.artist, `data-act="play" data-l="${k}" data-i="${i}"`, x)).join('')}</div>`; }
   try {
     const als = await itAlbums(ja ? 'J-POP ヒット' : 'top hits', 14); if (tok !== S.tok) return;
     $('#picks', el).insertAdjacentHTML('beforeend', als.slice(0, 4).map(r => `<div class="pick art" style="background-image:url('${esc((r.artworkUrl100 || '').replace('100x100', '600x600'))}')" data-act="go" data-r="ialbum:${r.collectionId}"><small>${t('album')}</small><b>${esc(r.collectionName)}</b><p>${esc(r.artistName)}</p></div>`).join(''));
@@ -512,7 +564,8 @@ function vSearch(el) {
 async function doSearch() {
   const res = $('#res'); if (!res || S.route !== 'search') return;
   const my = ++S.tok, q = S.q.trim(); S.lists = {}; S.lk = 0;
-  if (!q && S.src !== 'lib') { res.innerHTML = `<h2>${t('browse')}</h2><div class="cats">${catHTML()}</div>`; return; }
+  if (q.length > 1) { shist = [q, ...shist.filter(x => x !== q)].slice(0, 8); LS.set('shist', shist); }
+  if (!q && S.src !== 'lib') { res.innerHTML = (shist.length ? `<h2>${t('hist')}</h2><div class="chips">${shist.map(h => `<button data-act="cat" data-q="${esc(h)}">${ic('clock')}${esc(h)}</button>`).join('')}<button data-act="clrh">${t('clear')}</button></div>` : '') + `<h2>${t('browse')}</h2><div class="cats">${catHTML()}</div>`; return; }
   if (S.src === 'lib') {
     const ql = q.toLowerCase(), l = [...lib.values()].filter(x => !ql || (x.title + ' ' + x.artist + ' ' + x.album).toLowerCase().includes(ql));
     res.innerHTML = l.length ? rows(l) : emptyHTML('search', q ? t('noRes') : t('noSongs')); return;
@@ -566,6 +619,7 @@ const uploadBtns = () => `<button class="pbtn glass" data-act="upload">${ic('upl
 const allSongs = () => [...lib.values()];
 function vSongs(el) { const l = allSongs().sort((a, b) => a.title.localeCompare(b.title, ja ? 'ja' : 'en')); el.innerHTML = head(t('songs'), uploadBtns()) + (l.length ? playBtns(l) + rows(l) : emptyHTML('note', t('noSongs'))); }
 function vUploads(el) { const l = allSongs().filter(x => x.src === 'upload' || x.src === 'url').sort((a, b) => b.added - a.added); el.innerHTML = head(t('uploaded'), uploadBtns()) + (l.length ? playBtns(l) + rows(l) : emptyHTML('download', t('noSongs'))); }
+function vTop(el) { const l = topTracks(50); el.innerHTML = head(t('topPlayed')) + (l.length ? playBtns(l) + rows(l) : emptyHTML('flame', t('noRecent'))); }
 function vRecentAdded(el) { const l = allSongs().sort((a, b) => b.added - a.added); el.innerHTML = head(t('recentAdded'), uploadBtns()) + (l.length ? rows(l) : emptyHTML('clock', t('noSongs'))); }
 function playBtns(l) { const k = reg(l); return `<div class="dbtn" style="margin:6px 0 14px"><button class="pbtn glass" data-act="playall" data-l="${k}">${ic('play')}${t('play')}</button><button class="pbtn glass" data-act="playall" data-l="${k}" data-sh="1">${ic('shuffle')}${t('shuffle')}</button></div>`; }
 function groupBy(l, f) { const m = new Map(); l.forEach(x => { const k = f(x); (m.get(k) || m.set(k, []).get(k)).push(x); }); return m; }
@@ -577,10 +631,37 @@ function vAlbums(el) {
   const g = groupBy(allSongs(), x => x.artist + '|' + x.album);
   el.innerHTML = head(t('albums')) + (g.size ? `<div class="grid">${[...g].map(([k, l]) => tile(null, l[0].album || '—', l[0].artist, `data-act="go" data-r="lalbum:${esc(k)}"`, l.find(x => x.art) || l[0])).join('')}</div>` : emptyHTML('stack', t('noSongs')));
 }
+const doShare = async (title, text, url) => {
+  try { if (navigator.share) await navigator.share({ title, text, url }); else { await navigator.clipboard.writeText(url || text); toast(ja ? 'リンクをコピーしました' : 'Link copied'); } } catch {}
+};
+const shareUrl = tr => /^https?:/.test(tr.url || '') && tr.src !== 'itunes' ? tr.url : (tr.cid ? `https://music.apple.com/album/${tr.cid}` : `https://www.google.com/search?q=${encodeURIComponent(tr.title + ' ' + tr.artist)}`);
+function listItems(l, name) {
+  return [
+    { label: t('playNext'), icon: 'next', act: () => { if (P.i < 0) { play(l, 0); } else P.q.splice(P.i + 1, 0, ...l); toast(t('added')); } },
+    { label: t('playLast'), icon: 'list', act: () => { if (P.i < 0) { play(l, 0); } else P.q.push(...l); toast(t('added')); } },
+    { label: t('addPl'), icon: 'plnote', sub: playlists.filter(p => !p.folder).map(p => ({ label: p.name, icon: 'plnote', act: async () => { for (const r of l) { await addToLib(r, true); p.songs = p.songs || []; if (!p.songs.includes(r.id)) p.songs.push(r.id); } saveAll(); toast(t('added')); } })).concat([{ label: t('newPl'), icon: 'plus', act: async () => { const n = await ask(t('newPl'), t('plName'), name); if (n) { for (const r of l) await addToLib(r, true); playlists.push({ id: uid('pl'), name: n, songs: l.map(r => r.id) }); saveAll(); renderSidebar(); toast(t('added')); } } }]) },
+    { label: ja ? '共有…' : 'Share…', icon: 'share', act: () => doShare(name || '', l.slice(0, 10).map(x => x.title + ' - ' + x.artist).join('\n'), location.href) },
+  ];
+}
+async function vIArtist(el, name, tok) {
+  el.innerHTML = head('', '', true) + spinner;
+  const lc = s => (s || '').toLowerCase(), m = x => lc(x.artist).includes(lc(name)) || lc(name).includes(lc(x.artist));
+  const [ar, au1, it1] = await Promise.all([itunes(`search?term=${encodeURIComponent(name)}&entity=musicArtist&limit=1`).catch(() => ({ results: [] })), auSearch(name, 25).catch(() => []), itSongs(name, 15).catch(() => [])]);
+  if (tok !== S.tok) return;
+  const a = ar.results[0]; let albums = [];
+  if (a && a.artistId && m({ artist: a.artistName })) { try { albums = (await itunes(`lookup?id=${a.artistId}&entity=album&limit=24`)).results.filter(x => x.collectionId && x.wrapperType === 'collection'); } catch {} if (tok !== S.tok) return; }
+  const full = au1.filter(m), prev = it1.filter(m), tracks = [...full, ...prev];
+  const loc = allSongs().filter(x => x.artist === name);
+  const all = [...loc, ...tracks.filter(x => !loc.some(y => y.id === x.id))];
+  const after = albums.length ? `<h2>${ja ? 'アルバム' : 'Albums'}</h2><div class="hs">${albums.map(albumTile).join('')}</div>` : '';
+  const sim = au1.filter(x => !m(x)).slice(0, 12), k2 = reg(sim);
+  const sm = sim.length ? `<h2>${ja ? '似ているアーティスト' : 'Similar Artists'}</h2><div class="hs">${[...new Map(sim.map(x => [x.artist, x])).values()].map(x => `<div class="tile" data-act="go" data-r="iartist:${esc(x.artist)}"><div style="border-radius:50%;overflow:hidden">${cov(x)}</div><b style="text-align:center">${esc(x.artist)}</b></div>`).join('')}</div>` : '';
+  detail(el, { title: name, sub: [a && a.primaryGenreName, `${all.length} ${t('songsN')}`].filter(Boolean).join(' · '), art: albums[0] && (albums[0].artworkUrl100 || '').replace('100x100', '600x600'), tracks: all, noAlbum: false, after: after + sm, menu: [pinItem('iartist:' + name, name)] });
+}
 function detail(el, o) {
   const l = o.tracks, k = reg(l);
-  el.innerHTML = head('', `<button class="ib glass" data-act="hmore">${ic('ellipsis')}</button>`, true) + `<div class="dhead">${o.art ? `<div class="cov hd" style="background-image:url('${esc(o.art)}')"></div>` : (o.collage || cov(l[0], 'hd'))}<div><h1>${esc(o.title)}</h1><p>${esc(o.sub || '')}</p><div class="dbtn"><button class="pbtn glass" data-act="playall" data-l="${k}">${ic('play')}${t('play')}</button><button class="pbtn glass" data-act="playall" data-l="${k}" data-sh="1">${ic('shuffle')}${t('shuffle')}</button></div></div></div>${l.length ? rows(l, { num: o.num, noAlbum: o.noAlbum }) : emptyHTML(o.icon || 'note', o.empty || t('noSongs'))}`;
-  S.hmore = o.menu || null;
+  el.innerHTML = head('', `<button class="ib glass" data-act="hmore">${ic('ellipsis')}</button>`, true) + `<div class="dhead">${o.art ? `<div class="cov hd" style="background-image:url('${esc(o.art)}')"></div>` : (o.collage || cov(l[0], 'hd'))}<div><h1>${esc(o.title)}</h1><p>${esc(o.sub || '')}</p><div class="dbtn"><button class="pbtn glass" data-act="playall" data-l="${k}">${ic('play')}${t('play')}</button><button class="pbtn glass" data-act="playall" data-l="${k}" data-sh="1">${ic('shuffle')}${t('shuffle')}</button></div></div></div>${l.length ? rows(l, { num: o.num, noAlbum: o.noAlbum }) : emptyHTML(o.icon || 'note', o.empty || t('noSongs'))}${o.after || ''}`;
+  S.hmore = l.length ? [...(o.menu || []), '-', ...listItems(l, o.title)] : (o.menu || null);
 }
 function vLAlbum(el, k) { const l = allSongs().filter(x => x.artist + '|' + x.album === k); detail(el, { title: l[0]?.album || '—', sub: l[0]?.artist, tracks: l, noAlbum: true, menu: [pinItem(`lalbum:${k}`, l[0]?.album || '—')] }); }
 function vLArtist(el, n) { const l = allSongs().filter(x => x.artist === n); detail(el, { title: n, sub: `${l.length} ${t('songsN')}`, tracks: l, menu: [pinItem(`lartist:${n}`, n)] }); }
@@ -634,7 +715,7 @@ document.addEventListener('click', async e => {
   const a = e.target.closest('[data-act]'); if (!a) return;
   const d = a.dataset, rect = a.getBoundingClientRect();
   switch (d.act) {
-    case 'go': a.closest('#sidebar') ? go(d.r) : nav(d.r); break;
+    case 'go': a.closest('#sidebar, #ptab') ? go(d.r) : nav(d.r); break;
     case 'back': back(); break;
     case 'play': { const l = S.lists[d.l]; if (l) { if (cur() && l[+d.i].id === cur().id) toggle(); else play(l, +d.i); } break; }
     case 'more': openTrackMenu(a, rect.left - 200, rect.bottom + 4); break;
@@ -650,6 +731,7 @@ document.addEventListener('click', async e => {
     case 'name': { const n = await ask(t('yourName'), t('name'), uname); if (n !== null) { uname = n; LS.set('name', n); renderSidebar(); if (S.route === 'home') render(); } break; }
     case 'seg': S.src = d.s; $$('.seg button').forEach(b => b.classList.toggle('on', b === a)); doSearch(); break;
     case 'cat': S.q = d.q; { const i = $('#q'); if (i) i.value = d.q; } doSearch(); break;
+    case 'clrh': shist = []; LS.set('shist', shist); render(); break;
     case 'settings': openSettings(); break;
     case 'qrm': { const i = +d.i; if (i !== P.i) { P.q.splice(i, 1); if (i < P.i) P.i--; npPanel('queue'); } break; }
     case 'qclear': P.q.splice(P.i + 1); npPanel('queue'); break;
@@ -678,7 +760,7 @@ $('#sbopen').innerHTML = ic('sidebar');
 /* ============ 上部タブバー + Liquid Glassレンズ(スプリング物理) ============ */
 const TABS = [['home', 'home'], ['new', 'new'], ['radio', 'radio'], ['lib', 'library'], ['pls', 'playlists']];
 const TABROUTE = { home: 'home', new: 'new', radio: 'radio', lib: 'songs', pls: 'playlists', search: 'search' };
-const LIBR = ['recent', 'artists', 'albums', 'songs', 'uploads', 'lalbum', 'lartist'];
+const LIBR = ['library', 'recent', 'top', 'artists', 'albums', 'songs', 'uploads', 'lalbum', 'lartist'];
 const PLR = ['playlists', 'fav', 'pl', 'folder'];
 const tabOf = r => { const k = r.split(':')[0]; if (['home', 'new', 'radio', 'search'].includes(k)) return k; if (LIBR.includes(k)) return 'lib'; if (PLR.includes(k)) return 'pls'; return null; };
 function playLib(sh) {
@@ -813,7 +895,7 @@ function closeLens() {
 })();
 
 /* ============ 設定(外観・アクセント・Liquid Glass調整) ============ */
-const DEF = { ap: 'auto', acc: '#fa2d48', refr: 1, blur: 1.2, tint: 1 };
+const DEF = { ap: 'auto', acc: '#fa2d48', refr: 1, blur: 1.2, lg: .5, bold: 0, rp: 0, fs: 1 };
 const ST = Object.assign({}, DEF, LS.get('set', {}));
 const ACCS = ['#fa2d48', '#ff375f', '#ff9f0a', '#0a84ff', '#bf5af2', '#30d158'];
 const mqOrig = new WeakMap(); let rfDeb = 0;
@@ -832,30 +914,68 @@ function applyAppearance(mode) {
 }
 function applySettings(rebuild) {
   const root = document.documentElement.style;
-  root.setProperty('--acc', ST.acc); root.setProperty('--rfblur', ST.blur + 'px'); root.setProperty('--rfto', ST.tint);
+  root.setProperty('--acc', ST.acc); root.setProperty('--rfblur', ST.blur + 'px'); root.setProperty('--rfto', ST.lg * 2);
   applyAppearance(ST.ap);
   if (rebuild) { clearTimeout(rfDeb); rfDeb = setTimeout(() => { RF.forEach(r => { r.w = 0; }); rfSizes(); }, 160); }
 }
 const settingsItem = () => ({ label: ja ? '設定…' : 'Settings…', icon: 'sliders', act: openSettings });
+function applyExtra() {
+  document.body.classList.toggle('bold', !!ST.bold);
+  document.body.classList.toggle('noprlx', !!ST.rp);
+  document.documentElement.style.setProperty('--rfto', ST.lg * 2);
+  document.documentElement.style.setProperty('--fs', ST.fs || 1);
+}
+const effDark = () => ST.ap === 'dark' || (ST.ap === 'auto' && matchMedia('(prefers-color-scheme: dark)').matches);
 function openSettings() {
-  const m = $('#modal');
-  const sl = (k, label, min, max, step) => `<label class="srow"><span>${label}</span><input type="range" data-k="${k}" min="${min}" max="${max}" step="${step}" value="${ST[k]}"></label>`;
-  m.innerHTML = `<div class="dlg glass set"><h3>${ja ? '設定' : 'Settings'}</h3>
-    <div class="sgrp">${ja ? '外観' : 'Appearance'}</div><div class="seg2">${[['auto', ja ? '自動' : 'Auto'], ['light', ja ? 'ライト' : 'Light'], ['dark', ja ? 'ダーク' : 'Dark']].map(([k, l]) => `<button data-ap="${k}" class="${ST.ap === k ? 'on' : ''}">${l}</button>`).join('')}</div>
-    <div class="sgrp">${ja ? 'アクセントカラー' : 'Accent color'}</div><div class="swatches">${ACCS.map(c => `<button data-acc="${c}" style="background:${c}" class="${ST.acc === c ? 'on' : ''}" aria-label="${c}"></button>`).join('')}</div>
-    <div class="sgrp">Liquid Glass</div>${sl('refr', ja ? '屈折の強さ' : 'Refraction', 0, 2, .05)}${sl('blur', ja ? 'ぼかし' : 'Blur', 0, 6, .1)}${sl('tint', ja ? '色の濃さ' : 'Tint', 0, 2, .05)}
-    <div class="btns"><button data-v="reset">${ja ? '初期化' : 'Reset'}</button><button data-v="1" class="pri">${ja ? '完了' : 'Done'}</button></div></div>`;
-  m.classList.add('show');
-  const close = () => m.classList.remove('show');
-  m.oninput = e => { const r = e.target.closest('[data-k]'); if (!r) return; ST[r.dataset.k] = +r.value; LS.set('set', ST); applySettings(r.dataset.k === 'refr'); };
-  m.onclick = e => {
-    const b = e.target.closest('button');
-    if (!b) { if (e.target === m) close(); return; }
-    if (b.dataset.ap) { ST.ap = b.dataset.ap; $$('[data-ap]', m).forEach(x => x.classList.toggle('on', x === b)); }
-    else if (b.dataset.acc) { ST.acc = b.dataset.acc; $$('[data-acc]', m).forEach(x => x.classList.toggle('on', x === b)); }
-    else if (b.dataset.v === 'reset') { Object.assign(ST, DEF); LS.set('set', ST); applySettings(true); openSettings(); return; }
-    else { close(); return; }
-    LS.set('set', ST); applySettings();
+  let el = $('#settings'); if (el) el.remove();
+  el = document.createElement('div'); el.id = 'settings'; document.body.appendChild(el);
+  const st = []; // ページスタック
+  const tg = (k, on) => `<button class="tgl${on ? ' on' : ''}" data-tg="${k}" role="switch" aria-checked="${!!on}"><i></i></button>`;
+  const row = (l, right, go) => `<div class="srw"${go ? ` data-go="${go}"` : ''}><span>${l}</span><em>${right || ''}</em>${go ? `<b>${ic('chevr')}</b>` : ''}</div>`;
+  const pages = {
+    root: () => ({ title: ja ? '設定' : 'Settings', html:
+      `<div class="sgp">${row(ja ? '外観モード' : 'Appearance', ST.ap === 'auto' ? (ja ? '自動' : 'Auto') : effDark() ? (ja ? 'ダーク' : 'Dark') : (ja ? 'ライト' : 'Light'), 'ap')}</div>
+       <div class="sgp">${row('Liquid Glass', ST.lg < .34 ? (ja ? 'よりクリア' : 'Clearer') : ST.lg > .66 ? (ja ? '色合い調整' : 'Tinted') : (ja ? '標準' : 'Default'), 'lg')}</div><p class="sft">${ja ? 'Liquid Glass は、背後のコンテンツに合わせてダイナミックに変化します。' : 'Liquid Glass adapts dynamically to the content behind it.'}</p>
+       <div class="sgp">${row(ja ? 'テキストサイズを変更' : 'Text Size', '', 'fs')}<div class="srw"><span>${ja ? '文字を太くする' : 'Bold Text'}</span>${tg('bold', ST.bold)}</div></div>
+       <div class="sgp">${row(ja ? 'アクセントカラー' : 'Accent Color', `<u class="dot" style="background:${ST.acc}"></u>`, 'acc')}</div>
+       <div class="sgh">${ja ? 'アクセシビリティオプション' : 'Accessibility'}</div>
+       <div class="sgp"><div class="srw"><span>${ja ? '視差効果を減らす' : 'Reduce Parallax'}</span>${tg('rp', ST.rp)}</div></div>` }),
+    ap: () => ({ title: ja ? '外観モード' : 'Appearance', html:
+      `<div class="sgp apc"><div class="apr">${['light', 'dark'].map(k => { const on = ST.ap === 'auto' ? (effDark() === (k === 'dark')) : ST.ap === k;
+        return `<button data-ap="${k}" class="apo"><div class="pv ${k}"><span>9:41</span><i></i><i></i></div><div>${k === 'light' ? (ja ? 'ライト' : 'Light') : (ja ? 'ダーク' : 'Dark')}</div><div class="rd${on ? ' on' : ''}">${on ? ic('check') : ''}</div></button>`; }).join('')}</div>
+        <div class="srw"><span>${ja ? '自動' : 'Automatic'}</span>${tg('auto', ST.ap === 'auto')}</div></div>
+       <p class="sft">${ja ? '“自動” では、日の出または日の入に基づいてライトとダークが切り替わります。' : 'Automatic switches between Light and Dark based on sunrise and sunset.'}</p>` }),
+    lg: () => ({ title: 'Liquid Glass', html:
+      `<div class="lgpv"><div class="lgim"><div class="lgbar"><span class="glass lgc">${ic('list')}</span><span class="glass lgs">${ic('search')}<small>${ja ? '検索' : 'Search'}</small></span></div></div><div class="lgtx"><h3>${ja ? 'ようこそ Apple Park へ' : 'Welcome to Apple Park'}</h3><h4>${ja ? 'カリフォルニア州クパティーノ' : 'Cupertino, California'}</h4><p>${ja ? 'この場所ならではの自然の魅力や美しさを発見しましょう。' : 'Discover the natural beauty of this place.'}</p></div></div>
+       <div class="sgp lgsl"><span class="lgi">${ic('stack')}</span><input type="range" class="gs" data-k="lg" min="0" max="1" step="0.01" value="${ST.lg}"><span class="lgi f">${ic('stack')}</span></div>
+       <p class="sft">${ja ? '“クリア” を選択すると透明度が高くなり、“色合い調整” を選択すると不透明度が上がってコンテンツやコントロールのコントラストが強くなります。' : 'Clear is more transparent. Tinted is more opaque for stronger contrast.'}</p>
+       <div class="sgp lgsl2"><span>${ja ? '屈折の強さ' : 'Refraction'}</span><input type="range" class="gs" data-k="refr" min="0" max="2" step="0.05" value="${ST.refr}"></div>
+       <div class="sgp lgsl2"><span>${ja ? 'ぼかし' : 'Blur'}</span><input type="range" class="gs" data-k="blur" min="0" max="6" step="0.1" value="${ST.blur}"></div>` }),
+    fs: () => ({ title: ja ? 'テキストサイズ' : 'Text Size', html:
+      `<div class="sgp lgsl"><small style="font-size:14px">A</small><input type="range" class="gs" data-k="fs" min="0.85" max="1.3" step="0.05" value="${ST.fs || 1}"><small style="font-size:24px">A</small></div><p class="sft">${ja ? '画面全体の文字の大きさを調整します。' : 'Adjusts text size across the app.'}</p>` }),
+    acc: () => ({ title: ja ? 'アクセントカラー' : 'Accent Color', html:
+      `<div class="sgp swp">${ACCS.map(c => `<button data-acc="${c}" style="background:${c}" class="${ST.acc === c ? 'on' : ''}" aria-label="${c}"></button>`).join('')}</div>` }),
+  };
+  const draw = (dir) => {
+    const cur = st[st.length - 1], p = pages[cur]();
+    el.innerHTML = `<div class="sbar"><button class="sback glass" data-sb="${st.length > 1 ? 'back' : 'close'}" aria-label="Back">${ic(st.length > 1 ? 'chevl' : 'xmark')}</button><h1>${p.title}</h1></div><div class="sbody ${dir || ''}">${p.html}</div>`;
+    $$('input.gs', el).forEach(r => paint(r));
+  };
+  const paint = r => { const mn = +r.min, mx = +r.max; r.style.setProperty('--p', ((+r.value - mn) / (mx - mn) * 100) + '%'); };
+  const go = (pg) => { st.push(pg); draw('in'); };
+  st.push('root'); draw('');
+  requestAnimationFrame(() => el.classList.add('show'));
+  const close = () => { el.classList.remove('show'); setTimeout(() => el.remove(), 380); };
+  el.oninput = e => { const r = e.target.closest('input.gs'); if (!r) return; ST[r.dataset.k] = +r.value; paint(r); LS.set('set', ST); applySettings(r.dataset.k === 'refr'); applyExtra(); };
+  el.onclick = e => {
+    const t = e.target;
+    const sb = t.closest('[data-sb]'); if (sb) { if (sb.dataset.sb === 'back') { st.pop(); draw('out'); } else close(); return; }
+    const g = t.closest('[data-go]'); if (g) { go(g.dataset.go); return; }
+    const ap = t.closest('[data-ap]'); if (ap) { ST.ap = ap.dataset.ap; }
+    const ac = t.closest('[data-acc]'); if (ac) { ST.acc = ac.dataset.acc; }
+    const tgl = t.closest('[data-tg]');
+    if (tgl) { const k = tgl.dataset.tg; if (k === 'auto') ST.ap = ST.ap === 'auto' ? (effDark() ? 'dark' : 'light') : 'auto'; else ST[k] = ST[k] ? 0 : 1; }
+    if (ap || ac || tgl) { LS.set('set', ST); applySettings(); applyExtra(); const sc = $('.sbody', el).scrollTop; draw(''); $('.sbody', el).scrollTop = sc; }
   };
 }
 
@@ -957,7 +1077,7 @@ function rfInit() {
   document.body.classList.toggle('rf-off', !glassOn());
   const svg = document.createElementNS(SVGNS, 'svg'); svg.setAttribute('width', 0); svg.setAttribute('height', 0); svg.setAttribute('xmlns:xlink', 'http://www.w3.org/1999/xlink');
   svg.style.cssText = 'position:absolute;pointer-events:none'; svg.innerHTML = '<defs id="rfdefs"></defs>'; document.body.append(svg);
-  [mini, $('#topbar .tbar')].forEach((el, i) => {
+  [mini, $('#topbar .tbar'), $('#ptab')].forEach((el, i) => {
     if (!el) return;
     const rfm = document.createElement('div'); rfm.className = 'rfm'; rfm.innerHTML = '<div class="rfc"></div>';
     el.classList.add('rf'); el.prepend(rfm);
@@ -973,13 +1093,14 @@ function rfInit() {
 
 /* ============ 起動 ============ */
 (async function init() {
-  applySettings();
+  applySettings(); applyExtra();
   ['top', 'bot'].forEach(k => { const d = document.createElement('div'); d.className = 'edge ' + k; $('#app').insertBefore(d, $('#mini')); });
   setSB(S.sb);
-  buildTop(); applyMode(true); rfInit();
+  buildTop(); applyMode(true); applyPhone(); rfInit();
   await idb.init();
   (await idb.all()).forEach(x => lib.set(x.id, x));
   renderSidebar(); render(); ui();
+  try { restoreResume(); } catch {}
   if ('serviceWorker' in navigator && location.protocol.startsWith('http')) navigator.serviceWorker.register('sw.js').catch(() => {});
   if (navigator.storage && navigator.storage.persist) navigator.storage.persist().catch(() => {});
 })();
