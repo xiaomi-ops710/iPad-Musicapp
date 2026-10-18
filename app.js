@@ -669,7 +669,7 @@ function playLib(sh) {
 }
 function buildTop() {
   $('#topbar').innerHTML = `<div class="tbar glass"><button class="tbi" data-act="mode" data-m="sidebar" aria-label="Sidebar">${ic('sidebar')}</button>
-    <div class="tbtabs"><div class="tbreal"><i class="tbpill"></i>${TABS.map(([id, l]) => `<button class="tbt" data-tab="${id}">${t(l)}</button>`).join('')}</div><div class="tblens"><div class="lspec"></div></div></div>
+    <div class="tbtabs"><div class="tbreal"><i class="tbpill"></i>${TABS.map(([id, l]) => `<button class="tbt" data-tab="${id}">${t(l)}</button>`).join('')}</div><div class="tblens"><div class="lensv"></div><div class="lspec"></div></div></div>
     <button class="tbi" data-tab="search" aria-label="Search">${ic('search')}</button></div>
     <div class="tright"><button class="ib glass" data-act="tplay" aria-label="Play">${ic('play')}</button><button class="ib glass" data-act="tshuf" aria-label="Shuffle">${ic('shuffle')}</button><button class="ib glass" data-act="tmore" aria-label="More">${ic('ellipsis')}</button></div>`;
 }
@@ -744,7 +744,8 @@ function openLens(pid, x) {
   lensOn = true; root.classList.add('lensing'); hov = act.dataset.tab; LW = act.offsetWidth + 28; lens.style.width = LW + 'px';
   if (cloneEl) cloneEl.remove();
   cloneEl = real.cloneNode(true); cloneEl.removeAttribute('style'); cloneEl.classList.add('lensc'); cloneEl.style.width = real.offsetWidth + 'px';
-  lens.prepend(cloneEl);
+  $('.lensv', lens).prepend(cloneEl);
+  if (glassOn() && $('#rfdefs')) { const lh = lens.offsetHeight; try { rfFilter({ id: 'rfl', w: Math.round(LW), h: lh, B: Math.min(lh * .45, 26) }); $('.lensv', lens).style.filter = 'url(#rfl)'; } catch {} } else $('.lensv', lens).style.filter = '';
   lX.x = lX.t = act.offsetLeft + act.offsetWidth / 2; lX.v = 0;
   lS.x = .8; lS.v = 0; lS.t = 1.32; lO.x = .02; lO.t = 1; pS.t = 1;
   try { $('#topbar').setPointerCapture(pid); } catch {}
@@ -803,14 +804,14 @@ function sdRR(px, py, w, h, r) {
   const dx = Math.abs(px - w / 2) - (w / 2 - r), dy = Math.abs(py - h / 2) - (h / 2 - r);
   return Math.hypot(Math.max(dx, 0), Math.max(dy, 0)) + Math.min(Math.max(dx, dy), 0) - r;
 }
-function rfMap(w, h) {
+function rfMap(w, h, B) {
   const c = document.createElement('canvas'); c.width = w; c.height = h;
-  const g = c.getContext('2d'), im = g.createImageData(w, h), d = im.data, r = Math.min(h / 2, w / 2), B = Math.min(20, h * .42);
+  const g = c.getContext('2d'), im = g.createImageData(w, h), d = im.data, r = Math.min(h / 2, w / 2);
   for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) {
     const px = x + .5, py = y + .5, depth = -sdRR(px, py, w, h, r); let dx = 0, dy = 0;
     if (depth < B) {
       const e = .75, gx = sdRR(px + e, py, w, h, r) - sdRR(px - e, py, w, h, r), gy = sdRR(px, py + e, w, h, r) - sdRR(px, py - e, w, h, r), gl = Math.hypot(gx, gy) || 1;
-      const s = Math.pow(1 - Math.max(0, depth) / B, 2.2);
+      const s = Math.pow(1 - Math.max(0, depth) / B, 1.6);
       dx = -gx / gl * s; dy = -gy / gl * s;          // 縁ほど内側の像を引き寄せる(凸レンズ)
     }
     const i = (y * w + x) * 4; d[i] = 128 + 127 * dx; d[i + 1] = 128 + 127 * dy; d[i + 2] = 128; d[i + 3] = 255;
@@ -818,7 +819,7 @@ function rfMap(w, h) {
   g.putImageData(im, 0, 0); return c.toDataURL();
 }
 function rfFilter(r) {
-  const { w, h } = r, url = rfMap(w, h), S0 = 42;
+  const { w, h, B } = r, url = rfMap(w, h, B), S0 = 2 * B * 1.3; /* 縁の曲げ量=B*1.3: 縁の幅を超えて折り返し、文字が外側へ流れ反転して見える */
   const old = document.getElementById(r.id); if (old) old.remove();
   const f = document.createElementNS(SVGNS, 'filter');
   f.id = r.id; f.setAttribute('x', 0); f.setAttribute('y', 0); f.setAttribute('width', w); f.setAttribute('height', h);
@@ -832,7 +833,7 @@ function rfFilter(r) {
 function rfSizes() {
   RF.forEach(r => {
     const w = r.el.offsetWidth, h = r.el.offsetHeight; if (!w || !h || (w === r.w && h === r.h)) return;
-    r.w = w; r.h = h; try { rfFilter(r); } catch {}
+    r.w = w; r.h = h; r.B = Math.min(h * .48, 30); try { rfFilter(r); } catch {}
     r.rfm.style.filter = `url(#${r.id}) saturate(1.55) brightness(1.04) blur(.6px)`;
   });
 }

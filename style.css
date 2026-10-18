@@ -343,3 +343,5 @@ body.rf-off .rfm,body.rf-off .rf::after{display:none}
   background:linear-gradient(135deg,rgba(255,255,255,.95),rgba(255,255,255,.1) 30%,rgba(255,255,255,0) 62%,rgba(255,255,255,.6));
   -webkit-mask:linear-gradient(#000 0 0) content-box,linear-gradient(#000 0 0);-webkit-mask-composite:xor;mask:linear-gradient(#000 0 0) content-box exclude,linear-gradient(#000 0 0);mask-composite:exclude}
 #mini .mt b,#mini .mt small{text-shadow:0 0 8px var(--bg)}
+
+.lensv{position:absolute;inset:0;overflow:hidden;border-radius:inherit}
