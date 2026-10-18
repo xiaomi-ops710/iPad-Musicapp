@@ -43,7 +43,7 @@ const shuf = a => { a = a.slice(); for (let i = a.length - 1; i > 0; i--) { cons
 const sleep = ms => new Promise(r => setTimeout(r, ms));
 
 /* ============ 状態 ============ */
-const S = { mode: LS.get('mode', 'sidebar'), tab: 'home', route: 'home', stack: [], lists: {}, src: 'itunes', q: '', sb: innerWidth > 1000, col: LS.get('col', {}), edit: false, tok: 0, lk: 0 };
+const S = { mode: LS.get('mode', 'sidebar'), tab: 'home', route: 'home', stack: [], lists: {}, src: 'audius', q: '', sb: innerWidth > 1000, col: LS.get('col', {}), edit: false, tok: 0, lk: 0 };
 let playlists = LS.get('pl', []);
 let favs = new Set(LS.get('fav', []));
 let recent = LS.get('recent', []);
@@ -110,6 +110,41 @@ const itSongs = async (term, n = 25) => (await itunes(`search?term=${encodeURICo
 const itAlbums = async (term, n = 12) => (await itunes(`search?term=${encodeURIComponent(term)}&media=music&entity=album&limit=${n}`)).results;
 async function auFetch(path) {
   const r = await fetch(`${AUD}${path}${path.includes('?') ? '&' : '?'}app_name=${APP}`); if (!r.ok) throw 0; return (await r.json()).data || [];
+}
+async function getJSON(url) { try { const r = await fetch(url); if (!r.ok) throw 0; return await r.json(); } catch { return jsonp(url); } }
+const strip = h => String(h || '').replace(/<[^>]*>/g, '').trim();
+const parseLen = s => { if (!s) return 0; s = String(s); return s.includes(':') ? s.split(':').map(Number).reduce((a, x) => a * 60 + x, 0) : (+s || 0); };
+/* Internet Archive: 全曲フル(mp3)、キー不要 */
+const iaSearch = async q => (await getJSON(`https://archive.org/advancedsearch.php?q=${encodeURIComponent('(' + q + ') AND mediatype:audio')}&fl%5B%5D=identifier&fl%5B%5D=title&fl%5B%5D=creator&sort%5B%5D=downloads+desc&rows=30&output=json`)).response.docs;
+async function iaItem(id) {
+  const m = await getJSON(`https://archive.org/metadata/${encodeURIComponent(id)}`), md = m.metadata || {};
+  const seen = new Set(), out = [];
+  for (const f of (m.files || [])) {
+    if (!/\.(mp3|m4a)$/i.test(f.name) || /_sample|_spectrogram/i.test(f.name)) continue;
+    const title = f.title || f.name.replace(/^.*\//, '').replace(/\.[^.]+$/, ''), key = title.toLowerCase();
+    if (seen.has(key)) continue; seen.add(key);
+    out.push({ id: 'ia' + id + '/' + f.name, title, artist: f.creator || [].concat(md.creator || '').join(', ') || 'Internet Archive', album: md.title || id, dur: parseLen(f.length), url: `https://archive.org/download/${encodeURIComponent(id)}/${f.name.split('/').map(encodeURIComponent).join('/')}`, art: `https://archive.org/services/img/${encodeURIComponent(id)}`, src: 'archive', _n: f.name });
+  }
+  out.sort((a, b) => a._n.localeCompare(b._n, undefined, { numeric: true }));
+  return { md, tracks: out };
+}
+/* Wikimedia Commons: パブリックドメイン/CC音源(フル)、キー不要 */
+async function wcSearch(q) {
+  const d = await getJSON(`https://commons.wikimedia.org/w/api.php?action=query&generator=search&gsrsearch=${encodeURIComponent('filetype:audio ' + q)}&gsrnamespace=6&gsrlimit=30&prop=imageinfo&iiprop=url%7Cmime%7Cextmetadata&iiextmetadatafilter=Artist%7CObjectName&format=json&origin=*`);
+  const pages = Object.values((d.query && d.query.pages) || {}).sort((a, b) => a.index - b.index);
+  const list = pages.map(p => {
+    const ii = p.imageinfo && p.imageinfo[0]; if (!ii || !/audio|ogg/.test(ii.mime || '')) return null;
+    const em = ii.extmetadata || {};
+    return { id: 'wc' + p.pageid, title: strip(em.ObjectName && em.ObjectName.value) || p.title.replace(/^File:/, '').replace(/\.[^.]+$/, ''), artist: strip(em.Artist && em.Artist.value) || 'Wikimedia Commons', album: 'Wikimedia Commons', dur: 0, url: ii.url, art: null, src: 'commons', _ok: /mpeg|mp4|mp3|wav/.test(ii.mime) };
+  }).filter(Boolean);
+  return list.filter(x => x._ok).concat(list.filter(x => !x._ok)); // iPadで再生しやすい形式を先頭に
+}
+/* Jamendo: CC音源フル再生(無料のclient_idが必要) */
+const jamKey = () => LS.get('jamendo', '');
+async function jamSearch(q) {
+  const d = await getJSON(`https://api.jamendo.com/v3.0/tracks/?client_id=${encodeURIComponent(jamKey())}&format=json&limit=30&audioformat=mp32&imagesize=400&search=${encodeURIComponent(q)}`);
+  if (d.headers && d.headers.status === 'failed') throw 0;
+  return (d.results || []).map(r => ({ id: 'jm' + r.id, title: r.name, artist: r.artist_name, album: r.album_name || '', dur: r.duration || 0, url: r.audio, art: r.image || null, src: 'jamendo' }));
 }
 const auSearch = async (q, n = 25) => (await auFetch(`/tracks/search?query=${encodeURIComponent(q)}&limit=${n}`)).map(fromAu);
 const auTrending = async n => (await auFetch(`/tracks/trending?limit=${n}`)).map(fromAu);
@@ -387,6 +422,7 @@ function trackMenu(tr, x, y, list, fromPlayer) {
   else items.push({ label: t('rmLib'), icon: 'trash', danger: true, act: async () => { await removeFromLib(r.id); render(); } });
   const m = /^pl:(.+)$/.exec(S.route);
   if (m && !fromPlayer) { const p = playlists.find(p => p.id === m[1]); if (p) items.push({ label: t('rmPl'), icon: 'xmark', act: () => { p.songs = p.songs.filter(id => id !== r.id); saveAll(); render(); } }); }
+  if (fromPlayer) items.push('-', glassItem());
   menu(x, y, items);
 }
 
@@ -399,13 +435,13 @@ function nav(r, push = true) {
   renderSidebar(); render(); main.scrollTo(0, 0);
 }
 function back() { const r = S.stack.pop(); if (r) { S.route = r; renderSidebar(); render(); } }
-function setSB(v) { S.sb = v; document.body.classList.toggle('sb', v); }
+function setSB(v) { S.sb = v; document.body.classList.toggle('sb', v); rfKick(900); }
 
 function render() {
   S.lists = {}; S.lk = 0; S.tok++;
   const el = document.createElement('div'); el.className = 'page'; main.replaceChildren(el);
   const [k, arg] = S.route.split(/:(.*)/s);
-  const fn = { home: vHome, search: vSearch, new: vNew, radio: vRadio, recent: vRecentAdded, artists: vArtists, albums: vAlbums, songs: vSongs, uploads: vUploads, playlists: vPlaylists, fav: vFav, pl: vPl, folder: vFolder, ialbum: vIAlbum, lalbum: vLAlbum, lartist: vLArtist }[k] || vHome;
+  const fn = { home: vHome, search: vSearch, new: vNew, radio: vRadio, recent: vRecentAdded, artists: vArtists, albums: vAlbums, songs: vSongs, uploads: vUploads, playlists: vPlaylists, fav: vFav, pl: vPl, folder: vFolder, ialbum: vIAlbum, iaitem: vIAItem, lalbum: vLAlbum, lartist: vLArtist }[k] || vHome;
   fn(el, arg, S.tok);
 }
 
@@ -452,7 +488,7 @@ const CATS = [['Pop', 'pop'], ['Hits', 'hits'], ['J-POP', 'j-pop'], ['Alternativ
 const catHTML = () => CATS.map(([n, q], i) => `<div class="cat" style="--h:${(i * 47 + 340) % 360}" data-act="cat" data-q="${esc(q)}"><span>${n}</span>${ic('note')}</div>`).join('');
 let sTimer;
 function vSearch(el) {
-  const seg = [['itunes', 'iTunes'], ['audius', 'Audius'], ['lib', t('library')]];
+  const seg = [['audius', 'Audius'], ['archive', 'Internet Archive'], ['commons', 'Wikimedia'], ['jamendo', 'Jamendo'], ['itunes', ja ? 'iTunes(30秒)' : 'iTunes (30s)'], ['lib', t('library')]];
   el.innerHTML = `<div class="sbar"><label class="glass sin">${ic('search')}<input id="q" type="search" placeholder="${t('searchPh')}" value="${esc(S.q)}" autocomplete="off" enterkeyhint="search"></label><div class="seg glass">${seg.map(([k, l]) => `<button class="${S.src === k ? 'on' : ''}" data-act="seg" data-s="${k}">${l}</button>`).join('')}</div></div><div id="res"></div>`;
   $('#q', el).addEventListener('input', e => { S.q = e.target.value; clearTimeout(sTimer); sTimer = setTimeout(doSearch, 350); });
   doSearch();
@@ -470,6 +506,16 @@ async function doSearch() {
     if (S.src === 'itunes') {
       const [songs, als] = await Promise.all([itSongs(q, 30), itAlbums(q, 12)]); if (my !== S.tok) return;
       res.innerHTML = (als.length ? `<h2>${t('albums')}</h2><div class="hs">${als.map(albumTile).join('')}</div>` : '') + (songs.length ? `<h2>${t('songs')}</h2>${rows(songs)}` : '') || emptyHTML('search', t('noRes'));
+    } else if (S.src === 'archive') {
+      const items = await iaSearch(q); if (my !== S.tok) return;
+      res.innerHTML = items.length ? `<div class="grid">${items.map(r => tile(`https://archive.org/services/img/${encodeURIComponent(r.identifier)}`, r.title || r.identifier, [].concat(r.creator || '').join(', '), `data-act="go" data-r="iaitem:${esc(r.identifier)}"`)).join('')}</div>` : emptyHTML('search', t('noRes'));
+    } else if (S.src === 'commons') {
+      const songs = await wcSearch(q); if (my !== S.tok) return;
+      res.innerHTML = songs.length ? rows(songs) : emptyHTML('search', t('noRes'));
+    } else if (S.src === 'jamendo') {
+      if (!jamKey()) { res.innerHTML = emptyHTML('search', ja ? 'Jamendo（CC音源をフル再生）には無料のclient_idが必要です。<br>developer.jamendo.com で取得できます。' : 'Jamendo (full CC tracks) needs a free client_id.<br>Get one at developer.jamendo.com.') + `<div class="ctr"><button class="pbtn glass" data-act="jamkey">${ja ? 'client_idを設定' : 'Set client_id'}</button></div>`; return; }
+      const songs = await jamSearch(q); if (my !== S.tok) return;
+      res.innerHTML = songs.length ? rows(songs) : emptyHTML('search', t('noRes'));
     } else {
       const songs = await auSearch(q, 30); if (my !== S.tok) return;
       res.innerHTML = songs.length ? rows(songs) : emptyHTML('search', t('noRes'));
@@ -495,7 +541,7 @@ async function station(term) {
     term = Object.entries(cnt).sort((a, b) => b[1] - a[1])[0]?.[0] || (ja ? 'J-POP' : 'pop hits');
   }
   toast(t('preparing'), 8000);
-  try { const l = shuf(await itSongs(term, 50)); if (!l.length) throw 0; P.shuffle = true; play(l, 0); toast(term, 1500); }
+  try { let l = []; try { l = await auSearch(term, 40); } catch {} if (l.length < 5) l = await itSongs(term, 50); l = shuf(l); if (!l.length) throw 0; P.shuffle = true; play(l, 0); toast(term, 1500); }
   catch { toast(t('err')); }
 }
 
@@ -529,6 +575,13 @@ async function vIAlbum(el, id, tok) {
     if (tok !== S.tok) return;
     tr.forEach(x => { x.dur = 0; });
     detail(el, { title: c.collectionName, sub: `${c.artistName} · ${c.primaryGenreName || ''} · ${(c.releaseDate || '').slice(0, 4)}`, art: (c.artworkUrl100 || '').replace('100x100', '600x600'), tracks: tr, num: true, noAlbum: true, menu: [pinItem(`ialbum:${id}`, c.collectionName), { label: t('addLib'), icon: 'plus', act: async () => { for (const x of tr) await addToLib(x, true); toast(t('added')); } }] });
+  } catch { el.innerHTML = head('', '', true) + emptyHTML('stack', t('err')); }
+}
+async function vIAItem(el, id, tok) {
+  el.innerHTML = head('', '', true) + spinner;
+  try {
+    const { md, tracks } = await iaItem(id); if (tok !== S.tok) return;
+    detail(el, { title: md.title || id, sub: [].concat(md.creator || 'Internet Archive').join(', '), art: `https://archive.org/services/img/${encodeURIComponent(id)}`, tracks, num: true, noAlbum: true, empty: ja ? '再生できるmp3/m4aが見つかりません' : 'No playable mp3/m4a found', menu: [pinItem('iaitem:' + id, md.title || id), { label: t('addLib'), icon: 'plus', act: async () => { for (const x of tracks) await addToLib(x, true); toast(t('added')); } }] });
   } catch { el.innerHTML = head('', '', true) + emptyHTML('stack', t('err')); }
 }
 const pinItem = (r, name) => pins.some(p => p.r === r) ? { label: t('unpin'), icon: 'pin', act: () => { pins = pins.filter(p => p.r !== r); saveAll(); renderSidebar(); } } : { label: t('pin'), icon: 'pin', act: () => { pins.push({ r, name }); saveAll(); renderSidebar(); toast(t('added')); } };
@@ -573,7 +626,7 @@ document.addEventListener('click', async e => {
     case 'mode': S.mode = d.m; applyMode(); break;
     case 'tplay': playLib(false); break;
     case 'tshuf': playLib(true); break;
-    case 'tmore': menu(rect.right - 250, rect.bottom + 8, [{ label: t('upload'), icon: 'upload', act: () => $('#file').click() }, { label: t('addUrl'), icon: 'link', act: () => document.querySelector('[data-act=addurl]') ? document.querySelector('[data-act=addurl]').click() : (go('songs')) }, '-', { label: ja ? 'サイドバーに切り替え' : 'Switch to Sidebar', icon: 'sidebar', act: () => { S.mode = 'sidebar'; applyMode(); } }]); break;
+    case 'tmore': menu(rect.right - 250, rect.bottom + 8, [{ label: t('upload'), icon: 'upload', act: () => $('#file').click() }, { label: t('addUrl'), icon: 'link', act: () => document.querySelector('[data-act=addurl]') ? document.querySelector('[data-act=addurl]').click() : (go('songs')) }, glassItem(), '-', { label: ja ? 'サイドバーに切り替え' : 'Switch to Sidebar', icon: 'sidebar', act: () => { S.mode = 'sidebar'; applyMode(); } }]); break;
     case 'sidebar': setSB(!S.sb); break;
     case 'col': S.col[d.id] = !S.col[d.id]; saveAll(); renderSidebar(); break;
     case 'edit': S.edit = !S.edit; renderSidebar(); break;
@@ -582,6 +635,7 @@ document.addEventListener('click', async e => {
     case 'seg': S.src = d.s; $$('.seg button').forEach(b => b.classList.toggle('on', b === a)); doSearch(); break;
     case 'cat': S.q = d.q; { const i = $('#q'); if (i) i.value = d.q; } doSearch(); break;
     case 'station': station(d.term); break;
+    case 'jamkey': { const k = await ask('Jamendo client_id', 'client_id', jamKey()); if (k) { LS.set('jamendo', k); doSearch(); } break; }
     case 'upload': $('#file').click(); break;
     case 'addurl': { const r = await ask(t('addUrl'), t('urlPh'), '', t('titlePh')); if (r && /^https?:\/\//i.test(r[0])) { const [url, title] = r; await addToLib({ id: uid('ur'), title: title || decodeURIComponent(url.split('/').pop().split('?')[0]) || url, artist: new URL(url).hostname, album: ja ? '外部URL' : 'Web', dur: 0, url, art: null, src: 'url' }); render(); } break; }
     case 'plmenu': menu(rect.right - 250, rect.bottom + 8, [{ label: t('newPl'), icon: 'plnote', act: async () => { const n = await ask(t('newPl'), t('plName')); if (n) { playlists.push({ id: uid('pl'), name: n, songs: [] }); saveAll(); renderSidebar(); render(); } } }, { label: t('newFolder'), icon: 'folder', act: async () => { const n = await ask(t('newFolder'), t('fName')); if (n) { playlists.push({ id: uid('fo'), name: n, folder: true }); saveAll(); renderSidebar(); render(); } } }]); break;
@@ -660,7 +714,7 @@ function draw() {
     const hw = LW * sx * Math.min(1, lO.x * 1.4), a = lX.x - hw / 2, b = lX.x + hw / 2;
     real.style.webkitMaskImage = real.style.maskImage = `linear-gradient(90deg,#000 ${a - 4}px,transparent ${a + 1}px,transparent ${b - 1}px,#000 ${b + 4}px)`;
   } else if (cloneEl && lO.t === 0) {
-    lens.style.opacity = 0; real.style.webkitMaskImage = real.style.maskImage = ''; cloneEl.remove(); cloneEl = null;
+    lens.style.opacity = 0; real.style.webkitMaskImage = real.style.maskImage = ''; cloneEl.remove(); cloneEl = null; root.classList.remove('lensing');
   }
 }
 function renderTop() {
@@ -680,14 +734,14 @@ function applyMode(init) {
   const tabs = S.mode === 'tabs';
   document.body.classList.toggle('tabs', tabs);
   if (tabs) setSB(false); else setSB(init ? innerWidth > 1000 : true);
-  LS.set('mode', S.mode); placed = false; renderTop(); renderSidebar();
+  LS.set('mode', S.mode); placed = false; renderTop(); renderSidebar(); rfKick(1000); rfSizes();
   requestAnimationFrame(() => requestAnimationFrame(() => { placed = false; renderTop(); }));
 }
 addEventListener('resize', () => { placed = false; renderTop(); });
 
 function openLens(pid, x) {
   const root = gTabs(), real = $('.tbreal', root), lens = $('.tblens', root), act = $('.tbt.on', real); if (!act) return;
-  lensOn = true; hov = act.dataset.tab; LW = act.offsetWidth + 28; lens.style.width = LW + 'px';
+  lensOn = true; root.classList.add('lensing'); hov = act.dataset.tab; LW = act.offsetWidth + 28; lens.style.width = LW + 'px';
   if (cloneEl) cloneEl.remove();
   cloneEl = real.cloneNode(true); cloneEl.removeAttribute('style'); cloneEl.classList.add('lensc'); cloneEl.style.width = real.offsetWidth + 'px';
   lens.prepend(cloneEl);
@@ -738,10 +792,93 @@ function closeLens() {
   tp.addEventListener('pointerup', end); tp.addEventListener('pointercancel', end);
 })();
 
+/* ============ Liquid Glass 背景屈折(ミニプレイヤー / 上部タブバー) ============
+   背後のコンテンツ(#main)を複製してガラス内に敷き、縁だけ強く曲げる変位マップ(SVG feDisplacementMap)で屈折。
+   RGBで曲げ量をずらして色収差も出す。backdrop-filter+url()が使えないSafari/iPadでも動く方式。 */
+const RF = []; let rfRaf = 0, rfUntil = 0, rfT = 0, rfS = 0;
+const SVGNS = 'http://www.w3.org/2000/svg';
+const glassOn = () => LS.get('rf', 'on') !== 'off';
+const glassItem = () => ({ label: (ja ? 'ガラスの屈折効果: ' : 'Glass refraction: ') + (glassOn() ? (ja ? 'オン' : 'On') : (ja ? 'オフ' : 'Off')), icon: glassOn() ? 'check' : 'xmark', act: () => { LS.set('rf', glassOn() ? 'off' : 'on'); document.body.classList.toggle('rf-off', !glassOn()); if (glassOn()) { rfClone(); rfSizes(); } toast(glassOn() ? (ja ? '屈折効果 オン' : 'Refraction on') : (ja ? '屈折効果 オフ' : 'Refraction off')); } });
+function sdRR(px, py, w, h, r) {
+  const dx = Math.abs(px - w / 2) - (w / 2 - r), dy = Math.abs(py - h / 2) - (h / 2 - r);
+  return Math.hypot(Math.max(dx, 0), Math.max(dy, 0)) + Math.min(Math.max(dx, dy), 0) - r;
+}
+function rfMap(w, h) {
+  const c = document.createElement('canvas'); c.width = w; c.height = h;
+  const g = c.getContext('2d'), im = g.createImageData(w, h), d = im.data, r = Math.min(h / 2, w / 2), B = Math.min(20, h * .42);
+  for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) {
+    const px = x + .5, py = y + .5, depth = -sdRR(px, py, w, h, r); let dx = 0, dy = 0;
+    if (depth < B) {
+      const e = .75, gx = sdRR(px + e, py, w, h, r) - sdRR(px - e, py, w, h, r), gy = sdRR(px, py + e, w, h, r) - sdRR(px, py - e, w, h, r), gl = Math.hypot(gx, gy) || 1;
+      const s = Math.pow(1 - Math.max(0, depth) / B, 2.2);
+      dx = -gx / gl * s; dy = -gy / gl * s;          // 縁ほど内側の像を引き寄せる(凸レンズ)
+    }
+    const i = (y * w + x) * 4; d[i] = 128 + 127 * dx; d[i + 1] = 128 + 127 * dy; d[i + 2] = 128; d[i + 3] = 255;
+  }
+  g.putImageData(im, 0, 0); return c.toDataURL();
+}
+function rfFilter(r) {
+  const { w, h } = r, url = rfMap(w, h), S0 = 42;
+  const old = document.getElementById(r.id); if (old) old.remove();
+  const f = document.createElementNS(SVGNS, 'filter');
+  f.id = r.id; f.setAttribute('x', 0); f.setAttribute('y', 0); f.setAttribute('width', w); f.setAttribute('height', h);
+  f.setAttribute('filterUnits', 'userSpaceOnUse'); f.setAttribute('color-interpolation-filters', 'sRGB');
+  const ch = (k, sc, m) => `<feDisplacementMap in="SourceGraphic" in2="m" scale="${sc}" xChannelSelector="R" yChannelSelector="G" result="d${k}"/><feColorMatrix in="d${k}" type="matrix" values="${m}" result="c${k}"/>`;
+  f.innerHTML = `<feImage href="${url}" xlink:href="${url}" x="0" y="0" width="${w}" height="${h}" preserveAspectRatio="none" result="m"/>`
+    + ch('r', S0, '1 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 1 0') + ch('g', S0 * .92, '0 0 0 0 0 0 1 0 0 0 0 0 0 0 0 0 0 0 1 0') + ch('b', S0 * .84, '0 0 0 0 0 0 0 0 0 0 0 0 1 0 0 0 0 0 1 0')
+    + '<feBlend in="cr" in2="cg" mode="screen" result="rg"/><feBlend in="rg" in2="cb" mode="screen"/>';
+  $('#rfdefs').appendChild(f);
+}
+function rfSizes() {
+  RF.forEach(r => {
+    const w = r.el.offsetWidth, h = r.el.offsetHeight; if (!w || !h || (w === r.w && h === r.h)) return;
+    r.w = w; r.h = h; try { rfFilter(r); } catch {}
+    r.rfm.style.filter = `url(#${r.id}) saturate(1.55) brightness(1.04) blur(.6px)`;
+  });
+}
+function rfClone() {
+  if (!glassOn()) return;
+  const page = $('#main .page'); if (!page) return;
+  RF.forEach(r => {
+    const c = page.cloneNode(true); c.removeAttribute('id'); $$('[id]', c).forEach(e => e.removeAttribute('id')); c.setAttribute('aria-hidden', 'true');
+    r.rfc.replaceChildren(c);
+  });
+  rfKick();
+}
+function posIn(el) { let x = 0, y = 0, e = el; const app = $('#app'); while (e && e !== app) { x += e.offsetLeft; y += e.offsetTop; e = e.offsetParent; } return { x, y }; }
+function rfUpdate() {
+  rfRaf = 0; if (!glassOn()) return;
+  const mr = main.getBoundingClientRect(), cs = getComputedStyle(main);
+  RF.forEach(r => {
+    if (!r.el.offsetWidth) return; const p = posIn(r.el);
+    r.rfc.style.width = main.clientWidth + 'px'; r.rfc.style.padding = cs.padding;
+    r.rfc.style.transform = `translate(${(mr.left - p.x).toFixed(1)}px,${(mr.top - main.scrollTop - p.y).toFixed(1)}px)`;
+  });
+  if (performance.now() < rfUntil) rfRaf = requestAnimationFrame(rfUpdate);
+}
+function rfKick(ms = 0) { rfUntil = Math.max(rfUntil, performance.now() + ms); if (!rfRaf) rfRaf = requestAnimationFrame(rfUpdate); }
+function rfInit() {
+  document.body.classList.toggle('rf-off', !glassOn());
+  const svg = document.createElementNS(SVGNS, 'svg'); svg.setAttribute('width', 0); svg.setAttribute('height', 0); svg.setAttribute('xmlns:xlink', 'http://www.w3.org/1999/xlink');
+  svg.style.cssText = 'position:absolute;pointer-events:none'; svg.innerHTML = '<defs id="rfdefs"></defs>'; document.body.append(svg);
+  [mini, $('#topbar .tbar')].forEach((el, i) => {
+    if (!el) return;
+    const rfm = document.createElement('div'); rfm.className = 'rfm'; rfm.innerHTML = '<div class="rfc"></div>';
+    el.classList.add('rf'); el.prepend(rfm);
+    RF.push({ el, rfm, rfc: rfm.firstChild, id: 'rf' + i, w: 0, h: 0 });
+  });
+  new MutationObserver(() => { clearTimeout(rfT); rfT = setTimeout(rfClone, 90); }).observe(main, { childList: true, subtree: true, characterData: true });
+  main.addEventListener('scroll', () => rfKick(), { passive: true });
+  const sched = () => { clearTimeout(rfS); rfS = setTimeout(() => { rfSizes(); rfKick(); }, 160); };
+  addEventListener('resize', sched);
+  if (window.ResizeObserver) { const ro = new ResizeObserver(sched); RF.forEach(r => ro.observe(r.el)); }
+  rfSizes(); rfClone(); rfKick(1000);
+}
+
 /* ============ 起動 ============ */
 (async function init() {
   setSB(S.sb);
-  buildTop(); applyMode(true);
+  buildTop(); applyMode(true); rfInit();
   await idb.init();
   (await idb.all()).forEach(x => lib.set(x.id, x));
   renderSidebar(); render(); ui();

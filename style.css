@@ -318,3 +318,28 @@ body.tabs #main{padding-top:calc(78px + var(--sat))}
   background:linear-gradient(90deg,transparent,rgba(255,255,255,.8),transparent);filter:blur(.6px)}
 .lensc{position:absolute;top:6px;height:44px;display:flex;pointer-events:none;will-change:left}
 .lensc .tbt{text-shadow:none}
+
+/* ===== レンズ中は黒い楕円を出さない / ソース切替の横スクロール ===== */
+.lensc .tbpill{display:none!important}
+.tbtabs.lensing .tbpill{opacity:0!important;transition:none!important}
+.sbar{flex-wrap:wrap}
+.seg{overflow-x:auto;max-width:100%;scrollbar-width:none}
+.seg::-webkit-scrollbar{display:none}
+.seg button{white-space:nowrap}
+
+/* ===== Liquid Glass 背景屈折 ===== */
+:root{--rftint:linear-gradient(180deg,rgba(255,255,255,.30),rgba(255,255,255,.10))}
+@media(prefers-color-scheme:dark){:root{--rftint:linear-gradient(180deg,rgba(40,40,46,.42),rgba(20,20,24,.30))}}
+.rf{background:transparent;-webkit-backdrop-filter:none!important;backdrop-filter:none!important}
+body.rf-off .rf{background:var(--gl);-webkit-backdrop-filter:blur(26px) saturate(190%) brightness(1.04)!important;backdrop-filter:blur(26px) saturate(190%) brightness(1.04)!important}
+body.rf-off .rfm,body.rf-off .rf::after{display:none}
+.glass>.rfm{position:absolute!important;inset:0;overflow:hidden;border-radius:inherit;pointer-events:none;z-index:0;background:var(--bg);will-change:filter}
+.rfm::after{content:"";position:absolute;inset:0;background:var(--rftint)}
+.rfc{position:absolute;left:0;top:0;transform-origin:0 0;will-change:transform;pointer-events:none}
+.rfc,.rfc *{animation:none!important;transition:none!important;pointer-events:none!important}
+.rf::before{z-index:2;opacity:.38}
+.rf>*:not(.rfm){z-index:3}
+.rf::after{content:"";position:absolute;inset:0;border-radius:inherit;padding:1.3px;pointer-events:none;z-index:4;
+  background:linear-gradient(135deg,rgba(255,255,255,.95),rgba(255,255,255,.1) 30%,rgba(255,255,255,0) 62%,rgba(255,255,255,.6));
+  -webkit-mask:linear-gradient(#000 0 0) content-box,linear-gradient(#000 0 0);-webkit-mask-composite:xor;mask:linear-gradient(#000 0 0) content-box exclude,linear-gradient(#000 0 0);mask-composite:exclude}
+#mini .mt b,#mini .mt small{text-shadow:0 0 8px var(--bg)}
