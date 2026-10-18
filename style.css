@@ -370,3 +370,53 @@ body.tabs #main{padding-top:calc(88px + var(--sat))}
 .lyp{font-size:20px;font-weight:600;line-height:1.7;color:rgba(255,255,255,.88);padding:20px 14px}
 .nppanel h3{display:flex;align-items:center;justify-content:space-between}
 .nppanel h3 .pbtn{padding:6px 14px;font-size:14px;color:#fff;background:rgba(255,255,255,.18)}
+
+/* ===== v10: アプリ全体を本家(iPadOS 26 Music)寄りに ===== */
+/* スクロールエッジ効果: 上下端でコンテンツが滑らかにぼける */
+.edge{position:absolute;left:var(--ml);right:0;z-index:10;pointer-events:none;-webkit-backdrop-filter:blur(16px);backdrop-filter:blur(16px);transition:left .55s var(--ease)}
+.edge.top{top:0;height:calc(54px + var(--sat));-webkit-mask-image:linear-gradient(#000 35%,transparent);mask-image:linear-gradient(#000 35%,transparent);background:linear-gradient(var(--bg),transparent)}
+body.tabs .edge.top{height:calc(104px + var(--sat))}
+.edge.bot{bottom:0;height:130px;-webkit-mask-image:linear-gradient(transparent,#000 70%);mask-image:linear-gradient(transparent,#000 70%);background:linear-gradient(transparent,var(--bg))}
+/* アクセント色の薄塗りピル(再生/シャッフル) */
+.pbtn.glass{background:color-mix(in srgb,var(--acc) 14%,transparent);box-shadow:none}
+.pbtn{font-size:17px;padding:12px 26px}
+/* サイドバー: カプセル型の選択、アイコン拡大 */
+.ni{border-radius:99px;padding:10px 16px}
+.ni .ic{font-size:22px;width:26px}
+.ni.on{background:rgba(120,120,128,.22);box-shadow:inset 0 0 0 .5px var(--glh)}
+.sg{font-size:17px;color:var(--fg)}
+.profrow{display:flex;align-items:center;border-top:.5px solid var(--sep);padding-right:6px}
+.profrow .prof{border-top:0;flex:1}
+.profrow .ib{font-size:22px;color:var(--fg2)}
+/* 曲リスト/見出し */
+.cov.sm{width:52px;border-radius:9px}
+.tr{padding:8px 4px;gap:15px}
+.tr .ti b{font-size:17px}
+.tr .ti small{font-size:15px}
+h2{font-size:23px;letter-spacing:-.01em}
+.ph h1{font-size:36px;letter-spacing:-.015em}
+.tile b{font-size:16px}.tile small{font-size:14px}
+.pick{border-radius:24px}
+/* ダイアログ類の質感 */
+.dlg.glass{backdrop-filter:blur(40px) saturate(190%);-webkit-backdrop-filter:blur(40px) saturate(190%);background:var(--gl)}
+#menu{border-radius:26px}
+/* 屈折の調整値(設定画面)を反映 */
+.rfc{-webkit-filter:saturate(1.5) brightness(1.04) blur(var(--rfblur,1.2px));filter:saturate(1.5) brightness(1.04) blur(var(--rfblur,1.2px))}
+.rfm::after{opacity:calc(var(--rfto,1) * .6 + .1)}
+/* 設定ダイアログ */
+.dlg.set{width:min(430px,92vw);max-height:88vh;overflow:auto;text-align:left}
+.sgrp{font-size:13px;font-weight:600;color:var(--fg2);margin:16px 4px 8px;letter-spacing:.03em}
+.seg2{display:flex;background:rgba(120,120,128,.18);border-radius:12px;padding:3px}
+.seg2 button{flex:1;height:34px;border-radius:10px;font-weight:500;font-size:15px;transition:background .3s,box-shadow .3s}
+.seg2 button.on{background:var(--bg);box-shadow:0 1px 5px rgba(0,0,0,.25)}
+.swatches{display:flex;gap:14px;padding:2px 4px}
+.swatches button{width:36px;height:36px;border-radius:50%;box-shadow:inset 0 0 0 2px rgba(255,255,255,.4);transition:transform .35s var(--spring)}
+.swatches button:active{transform:scale(.85)}
+.swatches button.on{outline:3px solid var(--fg2);outline-offset:2px}
+.srow{display:flex;align-items:center;gap:12px;margin:6px 4px}
+.srow span{width:96px;font-size:15px;flex:none}
+.dlg .srow input[type=range]{flex:1;height:26px;background:transparent;margin:0;padding:0;border-radius:0}
+.dlg input[type=range]::-webkit-slider-runnable-track{height:6px;border-radius:3px;background:rgba(120,120,128,.35)}
+.dlg input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:24px;height:24px;border-radius:50%;background:#fff;box-shadow:0 1px 6px rgba(0,0,0,.4);margin-top:-9px}
+.dlg input[type=range]::-moz-range-track{height:6px;border-radius:3px;background:rgba(120,120,128,.35)}
+.dlg input[type=range]::-moz-range-thumb{width:24px;height:24px;border-radius:50%;background:#fff;border:0;box-shadow:0 1px 6px rgba(0,0,0,.4)}

@@ -438,7 +438,7 @@ function trackMenu(tr, x, y, list, fromPlayer) {
   else items.push({ label: t('rmLib'), icon: 'trash', danger: true, act: async () => { await removeFromLib(r.id); render(); } });
   const m = /^pl:(.+)$/.exec(S.route);
   if (m && !fromPlayer) { const p = playlists.find(p => p.id === m[1]); if (p) items.push({ label: t('rmPl'), icon: 'xmark', act: () => { p.songs = p.songs.filter(id => id !== r.id); saveAll(); render(); } }); }
-  if (fromPlayer) items.push('-', speedItem(), sleepItem(), glassItem());
+  if (fromPlayer) items.push('-', speedItem(), sleepItem(), glassItem(), settingsItem());
   menu(x, y, items);
 }
 
@@ -476,7 +476,7 @@ function renderSidebar() {
       ${grp('lib', t('library'), grp('pins', t('pins'), pinHTML) + LIBN.map(([r, i, l]) => ni(r, i, t(l))).join(''))}
       ${grp('pls', t('playlists'), ni('playlists', 'grid', t('allPl')) + ni('fav', 'star', t('fav')) + pl)}
       <div style="height:12px"></div></div>
-    <button class="prof" data-act="name"><span class="avatar">${ic('person')}</span><span>${esc(uname || t('name'))}</span></button>`;
+    <div class="profrow"><button class="prof" data-act="name"><span class="avatar">${ic('person')}</span><span>${esc(uname || t('name'))}</span></button><button class="ib" data-act="settings" aria-label="Settings">${ic('sliders')}</button></div>`;
 }
 
 /* ============ 画面: ホーム ============ */
@@ -642,7 +642,7 @@ document.addEventListener('click', async e => {
     case 'mode': S.mode = d.m; applyMode(); break;
     case 'tplay': playLib(false); break;
     case 'tshuf': playLib(true); break;
-    case 'tmore': menu(rect.right - 250, rect.bottom + 8, [{ label: t('upload'), icon: 'upload', act: () => $('#file').click() }, { label: t('addUrl'), icon: 'link', act: () => document.querySelector('[data-act=addurl]') ? document.querySelector('[data-act=addurl]').click() : (go('songs')) }, glassItem(), '-', { label: ja ? 'サイドバーに切り替え' : 'Switch to Sidebar', icon: 'sidebar', act: () => { S.mode = 'sidebar'; applyMode(); } }]); break;
+    case 'tmore': menu(rect.right - 250, rect.bottom + 8, [{ label: t('upload'), icon: 'upload', act: () => $('#file').click() }, { label: t('addUrl'), icon: 'link', act: () => document.querySelector('[data-act=addurl]') ? document.querySelector('[data-act=addurl]').click() : (go('songs')) }, glassItem(), settingsItem(), '-', { label: ja ? 'サイドバーに切り替え' : 'Switch to Sidebar', icon: 'sidebar', act: () => { S.mode = 'sidebar'; applyMode(); } }]); break;
     case 'sidebar': setSB(!S.sb); break;
     case 'col': S.col[d.id] = !S.col[d.id]; saveAll(); renderSidebar(); break;
     case 'edit': S.edit = !S.edit; renderSidebar(); break;
@@ -650,6 +650,7 @@ document.addEventListener('click', async e => {
     case 'name': { const n = await ask(t('yourName'), t('name'), uname); if (n !== null) { uname = n; LS.set('name', n); renderSidebar(); if (S.route === 'home') render(); } break; }
     case 'seg': S.src = d.s; $$('.seg button').forEach(b => b.classList.toggle('on', b === a)); doSearch(); break;
     case 'cat': S.q = d.q; { const i = $('#q'); if (i) i.value = d.q; } doSearch(); break;
+    case 'settings': openSettings(); break;
     case 'qrm': { const i = +d.i; if (i !== P.i) { P.q.splice(i, 1); if (i < P.i) P.i--; npPanel('queue'); } break; }
     case 'qclear': P.q.splice(P.i + 1); npPanel('queue'); break;
     case 'station': station(d.term); break;
@@ -763,7 +764,7 @@ function openLens(pid, x) {
   if (cloneEl) cloneEl.remove();
   cloneEl = real.cloneNode(true); cloneEl.removeAttribute('style'); cloneEl.classList.add('lensc'); cloneEl.style.width = real.offsetWidth + 'px';
   $('.lensv', lens).prepend(cloneEl);
-  if (glassOn() && $('#rfdefs')) { const lh = lens.offsetHeight; try { const nid = rfFilter({ id: 'rfl', w: Math.round(LW), h: lh, B: Math.min(lh * .3, 17), k: .9 }); $('.lensv', lens).style.filter = 'url(#' + nid + ')'; const o = document.getElementById(lensFid); if (o) o.remove(); lensFid = nid; } catch {} } else $('.lensv', lens).style.filter = '';
+  if (glassOn() && $('#rfdefs')) { const lh = lens.offsetHeight; try { const nid = rfFilter({ id: 'rfl', w: Math.round(LW), h: lh, B: Math.min(lh * .3, 17), k: .9 * ST.refr }); $('.lensv', lens).style.filter = 'url(#' + nid + ')'; const o = document.getElementById(lensFid); if (o) o.remove(); lensFid = nid; } catch {} } else $('.lensv', lens).style.filter = '';
   lX.x = lX.t = act.offsetLeft + act.offsetWidth / 2; lX.v = 0;
   lS.x = .8; lS.v = 0; lS.t = 1.32; lO.x = .02; lO.t = 1; pS.t = 1;
   try { $('#topbar').setPointerCapture(pid); } catch {}
@@ -810,6 +811,53 @@ function closeLens() {
   const end = () => { clearTimeout(timer); pS.t = 1; if (lensOn) closeLens(); start = null; kick(); };
   tp.addEventListener('pointerup', end); tp.addEventListener('pointercancel', end);
 })();
+
+/* ============ 設定(外観・アクセント・Liquid Glass調整) ============ */
+const DEF = { ap: 'auto', acc: '#fa2d48', refr: 1, blur: 1.2, tint: 1 };
+const ST = Object.assign({}, DEF, LS.get('set', {}));
+const ACCS = ['#fa2d48', '#ff375f', '#ff9f0a', '#0a84ff', '#bf5af2', '#30d158'];
+const mqOrig = new WeakMap(); let rfDeb = 0;
+function applyAppearance(mode) {
+  // prefers-color-scheme:dark のメディアルールを書き換えて、自動/ライト/ダークを強制
+  for (const sheet of document.styleSheets) {
+    let rules; try { rules = sheet.cssRules; } catch { continue; }
+    for (const r of rules) {
+      if (r.type !== CSSRule.MEDIA_RULE) continue;
+      if (!mqOrig.has(r)) mqOrig.set(r, r.media.mediaText);
+      const o = mqOrig.get(r); if (!/prefers-color-scheme:\s*dark/.test(o)) continue;
+      r.media.mediaText = mode === 'dark' ? 'all' : mode === 'light' ? 'not all' : o;
+    }
+  }
+  document.documentElement.style.colorScheme = mode === 'auto' ? '' : mode;
+}
+function applySettings(rebuild) {
+  const root = document.documentElement.style;
+  root.setProperty('--acc', ST.acc); root.setProperty('--rfblur', ST.blur + 'px'); root.setProperty('--rfto', ST.tint);
+  applyAppearance(ST.ap);
+  if (rebuild) { clearTimeout(rfDeb); rfDeb = setTimeout(() => { RF.forEach(r => { r.w = 0; }); rfSizes(); }, 160); }
+}
+const settingsItem = () => ({ label: ja ? '設定…' : 'Settings…', icon: 'sliders', act: openSettings });
+function openSettings() {
+  const m = $('#modal');
+  const sl = (k, label, min, max, step) => `<label class="srow"><span>${label}</span><input type="range" data-k="${k}" min="${min}" max="${max}" step="${step}" value="${ST[k]}"></label>`;
+  m.innerHTML = `<div class="dlg glass set"><h3>${ja ? '設定' : 'Settings'}</h3>
+    <div class="sgrp">${ja ? '外観' : 'Appearance'}</div><div class="seg2">${[['auto', ja ? '自動' : 'Auto'], ['light', ja ? 'ライト' : 'Light'], ['dark', ja ? 'ダーク' : 'Dark']].map(([k, l]) => `<button data-ap="${k}" class="${ST.ap === k ? 'on' : ''}">${l}</button>`).join('')}</div>
+    <div class="sgrp">${ja ? 'アクセントカラー' : 'Accent color'}</div><div class="swatches">${ACCS.map(c => `<button data-acc="${c}" style="background:${c}" class="${ST.acc === c ? 'on' : ''}" aria-label="${c}"></button>`).join('')}</div>
+    <div class="sgrp">Liquid Glass</div>${sl('refr', ja ? '屈折の強さ' : 'Refraction', 0, 2, .05)}${sl('blur', ja ? 'ぼかし' : 'Blur', 0, 6, .1)}${sl('tint', ja ? '色の濃さ' : 'Tint', 0, 2, .05)}
+    <div class="btns"><button data-v="reset">${ja ? '初期化' : 'Reset'}</button><button data-v="1" class="pri">${ja ? '完了' : 'Done'}</button></div></div>`;
+  m.classList.add('show');
+  const close = () => m.classList.remove('show');
+  m.oninput = e => { const r = e.target.closest('[data-k]'); if (!r) return; ST[r.dataset.k] = +r.value; LS.set('set', ST); applySettings(r.dataset.k === 'refr'); };
+  m.onclick = e => {
+    const b = e.target.closest('button');
+    if (!b) { if (e.target === m) close(); return; }
+    if (b.dataset.ap) { ST.ap = b.dataset.ap; $$('[data-ap]', m).forEach(x => x.classList.toggle('on', x === b)); }
+    else if (b.dataset.acc) { ST.acc = b.dataset.acc; $$('[data-acc]', m).forEach(x => x.classList.toggle('on', x === b)); }
+    else if (b.dataset.v === 'reset') { Object.assign(ST, DEF); LS.set('set', ST); applySettings(true); openSettings(); return; }
+    else { close(); return; }
+    LS.set('set', ST); applySettings();
+  };
+}
 
 /* ============ 歌詞(LRCLIB) / 再生速度 / スリープタイマー ============ */
 const lyc = new Map(); let lyLines = null, lyIdx = -1;
@@ -881,7 +929,7 @@ function rfFilter(r) {
 function rfSizes() {
   RF.forEach(r => {
     const w = r.el.offsetWidth, h = r.el.offsetHeight; if (!w || !h || (w === r.w && h === r.h)) return;
-    r.w = w; r.h = h; r.B = Math.min(h * .4, 24); r.k = 1.6; try { const nid = rfFilter(r); r.rfm.style.filter = r.rfm.style.webkitFilter = `url(#${nid})`; if (r.cur) { const o = document.getElementById(r.cur); if (o) o.remove(); } r.cur = nid; } catch {}
+    r.w = w; r.h = h; r.B = Math.min(h * .4, 24); r.k = 1.6 * ST.refr; try { const nid = rfFilter(r); r.rfm.style.filter = r.rfm.style.webkitFilter = `url(#${nid})`; if (r.cur) { const o = document.getElementById(r.cur); if (o) o.remove(); } r.cur = nid; } catch {}
   });
 }
 function rfClone() {
@@ -925,6 +973,8 @@ function rfInit() {
 
 /* ============ 起動 ============ */
 (async function init() {
+  applySettings();
+  ['top', 'bot'].forEach(k => { const d = document.createElement('div'); d.className = 'edge ' + k; $('#app').insertBefore(d, $('#mini')); });
   setSB(S.sb);
   buildTop(); applyMode(true); rfInit();
   await idb.init();
