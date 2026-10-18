@@ -602,7 +602,7 @@ document.addEventListener('pointerout', e => { const g = e.target.closest && e.t
 document.addEventListener('keydown', e => { if (e.target.tagName === 'INPUT') return; if (e.code === 'Space') { e.preventDefault(); toggle(); } else if (e.code === 'ArrowRight') next(); else if (e.code === 'ArrowLeft') prev(); });
 $('#sbopen').innerHTML = ic('sidebar');
 
-/* ============ 上部タブバー + ガラスレンズ ============ */
+/* ============ 上部タブバー + Liquid Glassレンズ(スプリング物理) ============ */
 const TABS = [['home', 'home'], ['new', 'new'], ['radio', 'radio'], ['lib', 'library'], ['pls', 'playlists']];
 const TABROUTE = { home: 'home', new: 'new', radio: 'radio', lib: 'songs', pls: 'playlists', search: 'search' };
 const LIBR = ['recent', 'artists', 'albums', 'songs', 'uploads', 'lalbum', 'lartist'];
@@ -615,11 +615,54 @@ function playLib(sh) {
 }
 function buildTop() {
   $('#topbar').innerHTML = `<div class="tbar glass"><button class="tbi" data-act="mode" data-m="sidebar" aria-label="Sidebar">${ic('sidebar')}</button>
-    <div class="tbtabs"><i class="tbpill"></i>${TABS.map(([id, l]) => `<button class="tbt" data-tab="${id}">${t(l)}</button>`).join('')}<div class="tblens"></div></div>
+    <div class="tbtabs"><div class="tbreal"><i class="tbpill"></i>${TABS.map(([id, l]) => `<button class="tbt" data-tab="${id}">${t(l)}</button>`).join('')}</div><div class="tblens"><div class="lspec"></div></div></div>
     <button class="tbi" data-tab="search" aria-label="Search">${ic('search')}</button></div>
     <div class="tright"><button class="ib glass" data-act="tplay" aria-label="Play">${ic('play')}</button><button class="ib glass" data-act="tshuf" aria-label="Shuffle">${ic('shuffle')}</button><button class="ib glass" data-act="tmore" aria-label="More">${ic('ellipsis')}</button></div>`;
 }
-function placePill(root, btn) { root.style.setProperty('--px', btn.offsetLeft + 'px'); root.style.setProperty('--pw', btn.offsetWidth + 'px'); }
+
+/* --- 小さなスプリング物理エンジン --- */
+class Spr {
+  constructor(x, k, c, ex = .05, ev = .5) { this.x = x; this.t = x; this.v = 0; this.k = k; this.c = c; this.ex = ex; this.ev = ev; }
+  step(dt) { this.v += (this.k * (this.t - this.x) - this.c * this.v) * dt; this.x += this.v * dt; }
+  get rest() { return Math.abs(this.v) < this.ev && Math.abs(this.t - this.x) < this.ex; }
+}
+const pX = new Spr(0, 300, 21), pW = new Spr(80, 300, 22), pS = new Spr(1, 420, 17, .002, .02),
+  lX = new Spr(0, 520, 34), lS = new Spr(.8, 380, 15, .002, .02), lO = new Spr(0, 520, 50, .01, .05);
+const SPR = [pX, pW, pS, lX, lS, lO];
+let LW = 100, lensOn = false, hov = null, placed = false, raf = 0, lastT = 0, cloneEl = null, guard = false;
+const gTabs = () => $('#topbar .tbtabs');
+function kick() { if (!raf) { lastT = performance.now(); raf = requestAnimationFrame(loop); } }
+function loop(ts) {
+  const dt = Math.min(.033, (ts - lastT) / 1000 || .016); lastT = ts;
+  for (let i = 0; i < 4; i++) SPR.forEach(s => s.step(dt / 4));
+  draw();
+  raf = (lensOn || !SPR.every(s => s.rest)) ? requestAnimationFrame(loop) : 0;
+}
+function draw() {
+  const root = gTabs(); if (!root) return;
+  const real = $('.tbreal', root), pill = $('.tbpill', real), lens = $('.tblens', root);
+  // 選択楕円: 速度で横に伸び縦に潰れる(スクイッシュ)
+  const st = Math.min(.3, Math.abs(pX.v) / 2400);
+  pill.style.width = pW.x + 'px';
+  pill.style.transform = `translateX(${pX.x}px) scale(${((1 + st) * pS.x).toFixed(4)},${((1 - st * .45) * pS.x).toFixed(4)})`;
+  if (cloneEl && lO.x > .01) {
+    // レンズ: 速度で伸縮し、縁の屈折(色収差)も速度で強まる
+    const ls = Math.min(.4, Math.abs(lX.v) / 1500);
+    const sx = lS.x * (1 + ls), sy = lS.x * (1 - ls * .5), left = lX.x - LW / 2;
+    lens.style.opacity = Math.min(1, lO.x);
+    lens.style.transform = `translateX(${left.toFixed(2)}px) scale(${sx.toFixed(4)},${sy.toFixed(4)})`;
+    lens.style.setProperty('--st', ls.toFixed(3));
+    cloneEl.style.left = (-left).toFixed(2) + 'px';
+    const cp = $('.tbpill', cloneEl); cp.style.width = pill.style.width; cp.style.transform = pill.style.transform;
+    const off = (.5 + ls * 7).toFixed(2);
+    cloneEl.style.filter = `drop-shadow(${-off}px 0 0 rgba(255,60,120,.45)) drop-shadow(${off}px 0 0 rgba(60,170,255,.45))`;
+    // レンズの下の本物のタブを穴あきマスクで消し、二重表示を防ぐ
+    const hw = LW * sx * Math.min(1, lO.x * 1.4), a = lX.x - hw / 2, b = lX.x + hw / 2;
+    real.style.webkitMaskImage = real.style.maskImage = `linear-gradient(90deg,#000 ${a - 4}px,transparent ${a + 1}px,transparent ${b - 1}px,#000 ${b + 4}px)`;
+  } else if (cloneEl && lO.t === 0) {
+    lens.style.opacity = 0; real.style.webkitMaskImage = real.style.maskImage = ''; cloneEl.remove(); cloneEl = null;
+  }
+}
 function renderTop() {
   const tp = $('#topbar'); if (!tp.firstChild) buildTop();
   const k = tabOf(S.route); if (k) S.tab = k;
@@ -627,65 +670,72 @@ function renderTop() {
   $('.tbi[data-tab=search]', tp).classList.toggle('on', S.tab === 'search');
   const on = $('.tbt.on', tp), root = $('.tbtabs', tp);
   root.style.setProperty('--po', on ? 1 : 0);
-  if (on) requestAnimationFrame(() => placePill(root, on));
+  if (on && !lensOn) {
+    pX.t = on.offsetLeft; pW.t = on.offsetWidth;
+    if (!placed && on.offsetWidth) { pX.x = pX.t; pW.x = pW.t; pX.v = pW.v = 0; placed = true; }
+    kick();
+  }
 }
 function applyMode(init) {
   const tabs = S.mode === 'tabs';
   document.body.classList.toggle('tabs', tabs);
   if (tabs) setSB(false); else setSB(init ? innerWidth > 1000 : true);
-  LS.set('mode', S.mode); renderTop(); renderSidebar();
-  requestAnimationFrame(() => requestAnimationFrame(renderTop));
+  LS.set('mode', S.mode); placed = false; renderTop(); renderSidebar();
+  requestAnimationFrame(() => requestAnimationFrame(() => { placed = false; renderTop(); }));
 }
-addEventListener('resize', () => renderTop());
+addEventListener('resize', () => { placed = false; renderTop(); });
+
+function openLens(pid, x) {
+  const root = gTabs(), real = $('.tbreal', root), lens = $('.tblens', root), act = $('.tbt.on', real); if (!act) return;
+  lensOn = true; hov = act.dataset.tab; LW = act.offsetWidth + 28; lens.style.width = LW + 'px';
+  if (cloneEl) cloneEl.remove();
+  cloneEl = real.cloneNode(true); cloneEl.removeAttribute('style'); cloneEl.classList.add('lensc'); cloneEl.style.width = real.offsetWidth + 'px';
+  lens.prepend(cloneEl);
+  lX.x = lX.t = act.offsetLeft + act.offsetWidth / 2; lX.v = 0;
+  lS.x = .8; lS.v = 0; lS.t = 1.32; lO.x = .02; lO.t = 1; pS.t = 1;
+  try { $('#topbar').setPointerCapture(pid); } catch {}
+  if (navigator.vibrate) navigator.vibrate(10);
+  moveLens(x);
+}
+function moveLens(x) {
+  const root = gTabs(), r = root.getBoundingClientRect();
+  const px = Math.max(0, Math.min(x - r.left, r.width));
+  lX.t = Math.max(LW / 2 - 12, Math.min(px, r.width - LW / 2 + 12));
+  const btns = $$('.tbreal .tbt', root);
+  const b = btns.find(b => px >= b.offsetLeft && px <= b.offsetLeft + b.offsetWidth) || btns[btns.length - 1];
+  if (b.dataset.tab !== hov) { hov = b.dataset.tab; if (navigator.vibrate) navigator.vibrate(6); }
+  pX.t = b.offsetLeft; pW.t = b.offsetWidth; root.style.setProperty('--po', 1);
+  if (cloneEl) $$('.tbt', cloneEl).forEach(c => c.classList.toggle('on', c.dataset.tab === hov));
+  kick();
+}
+function closeLens() {
+  lensOn = false; guard = true; setTimeout(() => guard = false, 140);
+  const b = $$('.tbreal .tbt', gTabs()).find(b => b.dataset.tab === hov);
+  if (b) lX.t = b.offsetLeft + b.offsetWidth / 2;      // 楕円へ吸い込まれるように戻る
+  lS.t = 1; setTimeout(() => { lO.t = 0; kick(); }, 120);
+  if (hov && hov !== S.tab) go(TABROUTE[hov]); else renderTop();
+  kick();
+}
 (function lensInit() {
-  const tp = $('#topbar'); let timer = null, start = null, lensOn = false, hov = null, guard = false, pid = null;
-  const root = () => $('.tbtabs', tp), lens = () => $('.tblens', tp);
+  const tp = $('#topbar'); let timer = null, start = null, pid = null, curX = 0;
   tp.addEventListener('click', e => {
     const b = e.target.closest('[data-tab]'); if (!b || guard || lensOn) return;
     go(TABROUTE[b.dataset.tab]);
   });
   tp.addEventListener('contextmenu', e => e.preventDefault());
   tp.addEventListener('pointerdown', e => {
-    const b = e.target.closest('.tbt.on'); if (!b) return;
-    start = { x: e.clientX, y: e.clientY }; pid = e.pointerId; root().classList.add('press');
-    timer = setTimeout(() => openLens(e.clientX), 320);
+    const b = e.target.closest('.tbreal .tbt.on'); if (!b || lensOn) return;
+    start = { x: e.clientX, y: e.clientY }; curX = e.clientX; pid = e.pointerId;
+    pS.t = 1.1; kick();
+    timer = setTimeout(() => { if (start) openLens(pid, curX); }, 220);
   });
   tp.addEventListener('pointermove', e => {
-    if (!start) return;
-    if (!lensOn) { if (Math.hypot(e.clientX - start.x, e.clientY - start.y) > 10) { clearTimeout(timer); start = null; root().classList.remove('press'); } return; }
-    moveLens(e.clientX);
+    curX = e.clientX; if (!start) return;
+    if (lensOn) return moveLens(e.clientX);
+    if (Math.hypot(e.clientX - start.x, e.clientY - start.y) > 10) { clearTimeout(timer); start = null; pS.t = 1; kick(); }
   });
-  const end = () => { clearTimeout(timer); if (root()) root().classList.remove('press'); if (lensOn) closeLens(); start = null; };
+  const end = () => { clearTimeout(timer); pS.t = 1; if (lensOn) closeLens(); start = null; kick(); };
   tp.addEventListener('pointerup', end); tp.addEventListener('pointercancel', end);
-  function openLens(x) {
-    const r = root(), l = lens(), active = $('.tbt.on', r); if (!active) return;
-    lensOn = true; hov = active.dataset.tab; try { tp.setPointerCapture(pid); } catch {}
-    const clone = r.cloneNode(true); clone.classList.add('lensc'); clone.classList.remove('press');
-    $('.tblens', clone).remove(); clone.style.width = r.offsetWidth + 'px';
-    l.replaceChildren(clone);
-    l.style.width = (active.offsetWidth + 18) + 'px';
-    moveLens(x, true);
-    requestAnimationFrame(() => l.classList.add('on'));
-    r.classList.remove('press'); r.classList.add('lensing');
-    if (navigator.vibrate) navigator.vibrate(10);
-  }
-  function moveLens(x) {
-    const r = root(), l = lens(), rect = r.getBoundingClientRect(), w = l.offsetWidth;
-    const cx = Math.max(w / 2 - 6, Math.min(x - rect.left, rect.width - w / 2 + 6));
-    const left = cx - w / 2; l.style.left = left + 'px';
-    const clone = $('.lensc', l); if (!clone) return; clone.style.left = (-left) + 'px';
-    const btn = $$('.tbt', r).find(b => cx >= b.offsetLeft && cx <= b.offsetLeft + b.offsetWidth) || $$('.tbt', r).pop();
-    if (btn.dataset.tab !== hov) { hov = btn.dataset.tab; if (navigator.vibrate) navigator.vibrate(6); }
-    placePill(r, btn); r.style.setProperty('--po', 1);
-    $$('.tbt', clone).forEach(b => b.classList.toggle('on', b.dataset.tab === hov));
-    const cb = $$('.tbt', clone).find(b => b.dataset.tab === hov); if (cb) placePill(clone, cb);
-  }
-  function closeLens() {
-    const r = root(), l = lens(); lensOn = false; guard = true; setTimeout(() => guard = false, 80);
-    const target = hov; l.classList.remove('on'); r.classList.remove('lensing');
-    if (target && target !== S.tab) go(TABROUTE[target]); else renderTop();
-    setTimeout(() => { if (!lensOn) l.replaceChildren(); }, 400);
-  }
 })();
 
 /* ============ 起動 ============ */

@@ -297,3 +297,24 @@ body.tabs #main{padding-top:calc(78px + var(--sat))}
 .lensc .tbpill{transition:transform .22s ease-out,width .22s ease-out;opacity:1}
 .tbtabs.lensing .tbpill{transition:transform .22s ease-out,width .22s ease-out}
 .ic{stroke-linecap:round}
+
+/* ===== Liquid Glass レンズ v2 (透明ガラス+屈折リム、JSスプリングで駆動) ===== */
+.tbreal{position:relative;display:flex;height:44px}
+.tbpill{transition:opacity .3s!important;will-change:transform,width}
+.lensc .tbpill{transition:none!important}
+.tblens{position:absolute;left:0;top:-6px;width:100px;height:calc(100% + 12px);border-radius:99px;overflow:hidden;z-index:3;pointer-events:none;opacity:0;
+  transform:translateX(0) scale(.8);transition:none!important;will-change:transform,opacity;
+  background:linear-gradient(180deg,rgba(255,255,255,.18),rgba(255,255,255,.03) 45%,rgba(255,255,255,.09));
+  -webkit-backdrop-filter:none;backdrop-filter:none;
+  box-shadow:0 12px 26px rgba(0,0,0,.34),0 2px 6px rgba(0,0,0,.22)}
+.tblens::after{content:"";position:absolute;inset:0;border-radius:inherit;pointer-events:none;z-index:3;
+  box-shadow:inset 0 0 0 1px rgba(255,255,255,.5),
+    inset 0 8px 10px -5px rgba(0,0,0,.5),inset 0 -8px 10px -5px rgba(0,0,0,.45),
+    inset 16px 0 18px -10px rgba(0,0,0,.4),inset -16px 0 18px -10px rgba(0,0,0,.4),
+    inset 3px 0 5px -1px rgba(255,70,120,calc(.45 + var(--st,0) * 1.2)),
+    inset -3px 0 5px -1px rgba(60,170,255,calc(.5 + var(--st,0) * 1.2)),
+    inset 0 1.5px 1px rgba(255,255,255,.55)}
+.lspec{position:absolute;left:16%;right:16%;top:4px;height:5px;border-radius:99px;z-index:4;
+  background:linear-gradient(90deg,transparent,rgba(255,255,255,.8),transparent);filter:blur(.6px)}
+.lensc{position:absolute;top:6px;height:44px;display:flex;pointer-events:none;will-change:left}
+.lensc .tbt{text-shadow:none}
