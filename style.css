@@ -289,3 +289,11 @@ body.tabs #main{padding-top:calc(78px + var(--sat))}
 @media(prefers-color-scheme:dark){.tbpill{background:rgba(0,0,0,.5)}.lensc .tbpill{background:rgba(0,0,0,.55)}}
 @media(max-width:900px){.tbt{padding:0 12px;font-size:15px}.tbi{width:40px}}
 @media(max-width:760px){.tright{display:none}}
+
+/* ===== レンズ修正: 下の楕円/文字と二重にならないよう不透明化し、内側の楕円は文字と同期 ===== */
+.tblens{background:rgba(238,240,246,.94);-webkit-backdrop-filter:blur(10px);backdrop-filter:blur(10px)}
+@media(prefers-color-scheme:dark){.tblens{background:rgba(46,48,54,.96)}}
+.lensc .tbt{text-shadow:none}
+.lensc .tbpill{transition:transform .22s ease-out,width .22s ease-out;opacity:1}
+.tbtabs.lensing .tbpill{transition:transform .22s ease-out,width .22s ease-out}
+.ic{stroke-linecap:round}
