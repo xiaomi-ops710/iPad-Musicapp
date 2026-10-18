@@ -345,3 +345,5 @@ body.rf-off .rfm,body.rf-off .rf::after{display:none}
 #mini .mt b,#mini .mt small{text-shadow:0 0 8px var(--bg)}
 
 .lensv{position:absolute;inset:0;overflow:hidden;border-radius:inherit}
+
+.rfc{-webkit-filter:saturate(1.5) brightness(1.04);filter:saturate(1.5) brightness(1.04)}

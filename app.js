@@ -745,7 +745,7 @@ function openLens(pid, x) {
   if (cloneEl) cloneEl.remove();
   cloneEl = real.cloneNode(true); cloneEl.removeAttribute('style'); cloneEl.classList.add('lensc'); cloneEl.style.width = real.offsetWidth + 'px';
   $('.lensv', lens).prepend(cloneEl);
-  if (glassOn() && $('#rfdefs')) { const lh = lens.offsetHeight; try { rfFilter({ id: 'rfl', w: Math.round(LW), h: lh, B: Math.min(lh * .45, 26) }); $('.lensv', lens).style.filter = 'url(#rfl)'; } catch {} } else $('.lensv', lens).style.filter = '';
+  if (glassOn() && $('#rfdefs')) { const lh = lens.offsetHeight; try { rfFilter({ id: 'rfl', w: Math.round(LW), h: lh, B: Math.min(lh * .3, 17), k: .9 }); $('.lensv', lens).style.filter = 'url(#rfl)'; } catch {} } else $('.lensv', lens).style.filter = '';
   lX.x = lX.t = act.offsetLeft + act.offsetWidth / 2; lX.v = 0;
   lS.x = .8; lS.v = 0; lS.t = 1.32; lO.x = .02; lO.t = 1; pS.t = 1;
   try { $('#topbar').setPointerCapture(pid); } catch {}
@@ -819,7 +819,7 @@ function rfMap(w, h, B) {
   g.putImageData(im, 0, 0); return c.toDataURL();
 }
 function rfFilter(r) {
-  const { w, h, B } = r, url = rfMap(w, h, B), S0 = 2 * B * 1.3; /* 縁の曲げ量=B*1.3: 縁の幅を超えて折り返し、文字が外側へ流れ反転して見える */
+  const { w, h, B } = r, url = rfMap(w, h, B), S0 = 2 * B * (r.k || 1.3); /* 縁の曲げ量=B*1.3: 縁の幅を超えて折り返し、文字が外側へ流れ反転して見える */
   const old = document.getElementById(r.id); if (old) old.remove();
   const f = document.createElementNS(SVGNS, 'filter');
   f.id = r.id; f.setAttribute('x', 0); f.setAttribute('y', 0); f.setAttribute('width', w); f.setAttribute('height', h);
@@ -833,8 +833,8 @@ function rfFilter(r) {
 function rfSizes() {
   RF.forEach(r => {
     const w = r.el.offsetWidth, h = r.el.offsetHeight; if (!w || !h || (w === r.w && h === r.h)) return;
-    r.w = w; r.h = h; r.B = Math.min(h * .48, 30); try { rfFilter(r); } catch {}
-    r.rfm.style.filter = `url(#${r.id}) saturate(1.55) brightness(1.04) blur(.6px)`;
+    r.w = w; r.h = h; r.B = Math.min(h * .4, 24); r.k = 1.6; try { rfFilter(r); } catch {}
+    r.rfm.style.filter = r.rfm.style.webkitFilter = `url(#${r.id})`; /* Safariはurl()に他のフィルタを連結すると無効になることがあるため単独で指定 */
   });
 }
 function rfClone() {
