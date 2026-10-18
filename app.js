@@ -497,17 +497,89 @@ function render() {
 /* ============ サイドバー ============ */
 const NAV = [['search', 'search', 'search'], ['home', 'house', 'home'], ['new', 'grid', 'new'], ['radio', 'radio', 'radio']];
 const LIBN = [['recent', 'clock', 'recentAdded'], ['top', 'flame', 'topPlayed'], ['artists', 'mic', 'artists'], ['albums', 'stack', 'albums'], ['songs', 'note', 'songs'], ['uploads', 'download', 'uploaded']];
-const PT = [['home', 'house', 'home'], ['new', 'grid', 'new'], ['radio', 'radio', 'radio'], ['library', 'library', 'library']];
+const PT = [['home', 'pthome', 'home'], ['new', 'ptgrid', 'new'], ['radio', 'ptradio', 'radio'], ['library', 'ptlib', 'library']];
 const isPhone = () => /iPhone|iPod/.test(navigator.userAgent) || innerWidth <= 700;
 function vLibrary(el) {
   el.innerHTML = head(t('library')) + `<div class="tl libl">${LIBN.map(([r, i, l]) => `<div class="tr" data-act="go" data-r="${r}"><span class="lic">${ic(i)}</span><div class="ti"><b>${t(l)}</b></div>${ic('chevr')}</div>`).join('')}<div class="tr" data-act="go" data-r="playlists"><span class="lic">${ic('grid')}</span><div class="ti"><b>${t('allPl')}</b></div>${ic('chevr')}</div><div class="tr" data-act="go" data-r="fav"><span class="lic">${ic('star')}</span><div class="ti"><b>${t('fav')}</b></div>${ic('chevr')}</div></div>`;
 }
+function buildPhone() {
+  const el = $('#ptab'); if (!el || el.firstChild) return;
+  el.innerHTML = `<div class="pt glass"><i class="ptsel"></i><div class="ptrow">${PT.map(([r, i, l]) => `<button data-act="go" data-r="${r}">${ic(i)}<span>${t(l)}</span></button>`).join('')}</div><div class="tblens"><div class="lensv"></div><div class="lspec"></div></div></div><button class="ps glass" data-act="go" data-r="search" aria-label="Search">${ic('search')}</button>`;
+  const pt = $('.pt', el);
+  pt.addEventListener('pointerdown', e => {
+    const b = e.target.closest('.ptrow button'); if (!b || (e.pointerType === 'mouse' && e.button)) return;
+    qDown = { x: e.clientX, y: e.clientY }; clearTimeout(qT);
+    const pid = e.pointerId, x0 = e.clientX; qT = setTimeout(() => { if (qDown) qOpen(pid, x0, b); }, 320);
+  });
+  pt.addEventListener('pointermove', e => {
+    if (!qDown) return;
+    if (qOn) qMove(e.clientX); else if (Math.hypot(e.clientX - qDown.x, e.clientY - qDown.y) > 12) { clearTimeout(qT); qDown = null; }
+  });
+  const end = () => { clearTimeout(qT); if (qOn) qClose(); qDown = null; };
+  pt.addEventListener('pointerup', end); pt.addEventListener('pointercancel', end);
+  el.addEventListener('click', e => { if (qGuard) { e.stopPropagation(); e.preventDefault(); } }, true);
+}
+const qX = new Spr(0, 520, 34), qS = new Spr(.8, 380, 15, .002, .02), qO = new Spr(0, 520, 50, .01, .05), qSPR = [qX, qS, qO];
+let qOn = false, qLW = 100, qHov = null, qClone = null, qT = 0, qRaf = 0, qLast = 0, qDown = null, qGuard = false, qFid = null;
+function qKick() { if (!qRaf) { qLast = performance.now(); qRaf = requestAnimationFrame(qLoop); } }
+function qLoop(ts) {
+  const dt = Math.min(.033, (ts - qLast) / 1000 || .016); qLast = ts;
+  for (let i = 0; i < 4; i++) qSPR.forEach(s => s.step(dt / 4));
+  qDraw(); qRaf = (qOn || !qSPR.every(s => s.rest)) ? requestAnimationFrame(qLoop) : 0;
+}
+function qDraw() {
+  const pt = $('#ptab .pt'); if (!pt) return; const lens = $('.tblens', pt), row = $('.ptrow', pt);
+  if (qClone && qO.x > .01) {
+    const ls = Math.min(.4, Math.abs(qX.v) / 1500), sx = qS.x * (1 + ls), sy = qS.x * (1 - ls * .5), left = qX.x - qLW / 2;
+    lens.style.opacity = Math.min(1, qO.x);
+    lens.style.transform = `translateX(${left.toFixed(2)}px) scale(${sx.toFixed(4)},${sy.toFixed(4)})`;
+    lens.style.setProperty('--st', ls.toFixed(3));
+    qClone.style.left = (-left).toFixed(2) + 'px';
+    const off = (.5 + ls * 7).toFixed(2);
+    qClone.style.filter = `drop-shadow(${-off}px 0 0 rgba(255,60,120,.45)) drop-shadow(${off}px 0 0 rgba(60,170,255,.45))`;
+    const hw = qLW * sx * Math.min(1, qO.x * 1.4), a = qX.x - hw / 2, b = qX.x + hw / 2;
+    row.style.webkitMaskImage = row.style.maskImage = `linear-gradient(90deg,#000 ${a - 4}px,transparent ${a + 1}px,transparent ${b - 1}px,#000 ${b + 4}px)`;
+  } else if (qClone && qO.t === 0) {
+    lens.style.opacity = 0; row.style.webkitMaskImage = row.style.maskImage = ''; qClone.remove(); qClone = null; pt.classList.remove('lensing'); renderPhone();
+  }
+}
+function qSel(b) { const sel = $('#ptab .ptsel'); if (sel && b) { sel.style.opacity = 1; sel.style.width = b.offsetWidth + 'px'; sel.style.transform = `translateX(${b.offsetLeft}px)`; } }
+function qOpen(pid, x, pressed) {
+  const pt = $('#ptab .pt'), row = $('.ptrow', pt), lens = $('.tblens', pt), act = $('.ptrow button.on', pt) || pressed;
+  qOn = true; qHov = act.dataset.r; qLW = act.offsetWidth + 22; lens.style.width = qLW + 'px'; pt.classList.add('lensing');
+  if (qClone) qClone.remove();
+  qClone = row.cloneNode(true); qClone.removeAttribute('style'); qClone.className = 'ptc'; qClone.style.width = row.offsetWidth + 'px';
+  $('.lensv', lens).prepend(qClone);
+  if (glassOn() && $('#rfdefs')) { const lh = lens.offsetHeight; try { const nid = rfFilter({ id: 'rfq', w: Math.round(qLW), h: lh, B: Math.min(lh * .3, 17), k: .9 * ST.refr }); $('.lensv', lens).style.filter = 'url(#' + nid + ')'; const o = document.getElementById(qFid); if (o) o.remove(); qFid = nid; } catch {} } else $('.lensv', lens).style.filter = '';
+  qX.x = qX.t = act.offsetLeft + act.offsetWidth / 2; qX.v = 0; qS.x = .8; qS.v = 0; qS.t = 1.3; qO.x = .02; qO.t = 1;
+  try { pt.setPointerCapture(pid); } catch {}
+  if (navigator.vibrate) navigator.vibrate(10);
+  qMove(x);
+}
+function qMove(x) {
+  const pt = $('#ptab .pt'), r = pt.getBoundingClientRect(), px = Math.max(0, Math.min(x - r.left, r.width));
+  qX.t = Math.max(qLW / 2 - 8, Math.min(px, r.width - qLW / 2 + 8));
+  const btns = $$('.ptrow button', pt), b = btns.find(b => px >= b.offsetLeft && px <= b.offsetLeft + b.offsetWidth) || btns[btns.length - 1];
+  if (b.dataset.r !== qHov) { qHov = b.dataset.r; if (navigator.vibrate) navigator.vibrate(6); }
+  if (qClone) $$('button', qClone).forEach(c => c.classList.toggle('on', c.dataset.r === qHov));
+  qKick();
+}
+function qClose() {
+  qOn = false; qGuard = true; setTimeout(() => qGuard = false, 160);
+  const pt = $('#ptab .pt'), b = $$('.ptrow button', pt).find(b => b.dataset.r === qHov);
+  if (b) { qX.t = b.offsetLeft + b.offsetWidth / 2; qSel(b); }
+  qS.t = 1; setTimeout(() => { qO.t = 0; qKick(); }, 120);
+  if (qHov) go(qHov);
+  qKick();
+}
 function renderPhone() {
-  const el = $('#ptab'); if (!el) return;
+  const el = $('#ptab'); if (!el) return; buildPhone();
+  if (qOn) return;
   const k = S.route.split(':')[0], act = k === 'search' ? 'search' : LIBR.includes(k) || PLR.includes(k) ? 'library' : k;
-  el.innerHTML = `<div class="pt glass"><i class="ptsel"></i>${PT.map(([r, i, l]) => `<button class="${act === r ? 'on' : ''}" data-act="go" data-r="${r}">${ic(i)}<span>${t(l)}</span></button>`).join('')}</div><button class="ps glass${act === 'search' ? ' on' : ''}" data-act="go" data-r="search" aria-label="Search">${ic('search')}</button>`;
-  const on = $('.pt button.on', el), sel = $('.ptsel', el);
-  if (on && sel) { sel.style.opacity = 1; sel.style.transform = `translateX(${on.offsetLeft}px)`; sel.style.width = on.offsetWidth + 'px'; } else if (sel) sel.style.opacity = 0;
+  $$('.ptrow button', el).forEach(b => b.classList.toggle('on', b.dataset.r === act));
+  $('.ps', el).classList.toggle('on', act === 'search');
+  const on = $('.ptrow button.on', el), sel = $('.ptsel', el);
+  if (on) qSel(on); else sel.style.opacity = 0;
 }
 function applyPhone() {
   const p = isPhone(); document.body.classList.toggle('phone', p);
@@ -1077,7 +1149,7 @@ function rfInit() {
   document.body.classList.toggle('rf-off', !glassOn());
   const svg = document.createElementNS(SVGNS, 'svg'); svg.setAttribute('width', 0); svg.setAttribute('height', 0); svg.setAttribute('xmlns:xlink', 'http://www.w3.org/1999/xlink');
   svg.style.cssText = 'position:absolute;pointer-events:none'; svg.innerHTML = '<defs id="rfdefs"></defs>'; document.body.append(svg);
-  [mini, $('#topbar .tbar'), $('#ptab')].forEach((el, i) => {
+  buildPhone(); [mini, $('#topbar .tbar'), $('#ptab .pt'), $('#ptab .ps')].forEach((el, i) => {
     if (!el) return;
     const rfm = document.createElement('div'); rfm.className = 'rfm'; rfm.innerHTML = '<div class="rfc"></div>';
     el.classList.add('rf'); el.prepend(rfm);
