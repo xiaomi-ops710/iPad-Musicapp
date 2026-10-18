@@ -1,4 +1,4 @@
-const CACHE = 'music-pwa-v15';
+const CACHE = 'music-pwa-v16';
 const SHELL = ['./', './index.html', './style.css', './app.js', './manifest.webmanifest',
   './icons/icon-192.png', './icons/icon-512.png', './icons/apple-touch-icon.png'];
 

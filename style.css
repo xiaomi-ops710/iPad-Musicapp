@@ -512,7 +512,6 @@ body.phone #mini .hide-s,body.phone #mini [data-m=prev]{display:none}
 body.phone #mini .mi .cov{width:40px}
 body.phone #mini .prog{display:none}
 body.phone .edge.bot{height:190px}
-body.phone #toast{bottom:150px}
 .libl .tr{padding:14px 4px}.libl .tr>.ic{color:var(--fg2);font-size:15px}
 .lic{color:var(--acc);font-size:26px;width:34px;display:inline-flex;justify-content:center}
 body.phone .dhead .cov.hd{width:min(70vw,300px)}

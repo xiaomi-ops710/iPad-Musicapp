@@ -497,6 +497,12 @@ function render() {
 /* ============ サイドバー ============ */
 const NAV = [['search', 'search', 'search'], ['home', 'house', 'home'], ['new', 'grid', 'new'], ['radio', 'radio', 'radio']];
 const LIBN = [['recent', 'clock', 'recentAdded'], ['top', 'flame', 'topPlayed'], ['artists', 'mic', 'artists'], ['albums', 'stack', 'albums'], ['songs', 'note', 'songs'], ['uploads', 'download', 'uploaded']];
+/* --- 小さなスプリング物理エンジン --- */
+class Spr {
+  constructor(x, k, c, ex = .05, ev = .5) { this.x = x; this.t = x; this.v = 0; this.k = k; this.c = c; this.ex = ex; this.ev = ev; }
+  step(dt) { this.v += (this.k * (this.t - this.x) - this.c * this.v) * dt; this.x += this.v * dt; }
+  get rest() { return Math.abs(this.v) < this.ev && Math.abs(this.t - this.x) < this.ex; }
+}
 const PT = [['home', 'pthome', 'home'], ['new', 'ptgrid', 'new'], ['radio', 'ptradio', 'radio'], ['library', 'ptlib', 'library']];
 const isPhone = () => /iPhone|iPod/.test(navigator.userAgent) || innerWidth <= 700;
 function vLibrary(el) {
@@ -847,12 +853,6 @@ function buildTop() {
     <div class="tright"><button class="ib glass" data-act="tplay" aria-label="Play">${ic('play')}</button><button class="ib glass" data-act="tshuf" aria-label="Shuffle">${ic('shuffle')}</button><button class="ib glass" data-act="tmore" aria-label="More">${ic('ellipsis')}</button></div>`;
 }
 
-/* --- 小さなスプリング物理エンジン --- */
-class Spr {
-  constructor(x, k, c, ex = .05, ev = .5) { this.x = x; this.t = x; this.v = 0; this.k = k; this.c = c; this.ex = ex; this.ev = ev; }
-  step(dt) { this.v += (this.k * (this.t - this.x) - this.c * this.v) * dt; this.x += this.v * dt; }
-  get rest() { return Math.abs(this.v) < this.ev && Math.abs(this.t - this.x) < this.ex; }
-}
 const pX = new Spr(0, 300, 21), pW = new Spr(80, 300, 22), pS = new Spr(1, 420, 17, .002, .02),
   lX = new Spr(0, 520, 34), lS = new Spr(.8, 380, 15, .002, .02), lO = new Spr(0, 520, 50, .01, .05);
 const SPR = [pX, pW, pS, lX, lS, lO];
