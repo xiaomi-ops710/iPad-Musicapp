@@ -347,3 +347,26 @@ body.rf-off .rfm,body.rf-off .rf::after{display:none}
 .lensv{position:absolute;inset:0;overflow:hidden;border-radius:inherit}
 
 .rfc{-webkit-filter:saturate(1.5) brightness(1.04);filter:saturate(1.5) brightness(1.04)}
+
+/* ===== v9: 角の黒ずみ修正 / タブバーのサイズ・文字を本家に近づける / 歌詞 ===== */
+.glass>.rfm{clip-path:inset(0 round 999px);-webkit-clip-path:inset(0 round 999px);transform:translateZ(0)}
+.rfc{-webkit-filter:saturate(1.5) brightness(1.04) blur(1.2px);filter:saturate(1.5) brightness(1.04) blur(1.2px)}
+@media(prefers-color-scheme:dark){:root{--rftint:linear-gradient(180deg,rgba(36,36,42,.52),rgba(20,20,24,.40))}}
+.tbar.glass{height:60px;padding:5px}
+.tbtabs,.tbreal{height:50px}
+.tbi{width:54px;height:50px;font-size:27px}
+.tbt{padding:0 24px;font-size:19px;font-weight:500;letter-spacing:.01em}
+.lensc{top:6px;height:50px}
+.tright{gap:12px}
+.tright .ib{width:54px;height:54px;font-size:24px}
+body.tabs #main{padding-top:calc(88px + var(--sat))}
+#mini{height:64px}
+@media(max-width:900px){.tbt{padding:0 13px;font-size:17px}.tbi{width:46px}}
+.lyw{padding:30% 8px 55%}
+.lyl{font-size:28px;font-weight:700;line-height:1.3;margin:6px 8px;padding:8px 12px;border-radius:14px;color:rgba(255,255,255,.36);transform-origin:left center;
+  transition:color .4s,transform .55s var(--spring),filter .4s;cursor:pointer;filter:blur(1px)}
+.lyl.on{color:#fff;transform:scale(1.04);filter:none}
+.lyl.past{color:rgba(255,255,255,.5);filter:none}
+.lyp{font-size:20px;font-weight:600;line-height:1.7;color:rgba(255,255,255,.88);padding:20px 14px}
+.nppanel h3{display:flex;align-items:center;justify-content:space-between}
+.nppanel h3 .pbtn{padding:6px 14px;font-size:14px;color:#fff;background:rgba(255,255,255,.18)}

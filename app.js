@@ -235,7 +235,7 @@ function prev() {
 }
 au.addEventListener('play', () => { document.body.classList.add('playing'); ui(); });
 au.addEventListener('pause', () => { document.body.classList.remove('playing'); ui(); });
-au.addEventListener('ended', () => next(true));
+au.addEventListener('ended', () => { if (S.sleepEnd) { S.sleepEnd = false; au.pause(); ui(); return; } next(true); });
 au.addEventListener('timeupdate', tick);
 au.addEventListener('loadedmetadata', () => { const tr = cur(); if (tr && isFinite(au.duration) && !tr.dur) tr.dur = au.duration; tick(); });
 au.addEventListener('error', () => { if (cur()) { toast(t('unsupported')); setTimeout(() => P.i + 1 < P.q.length && next(), 800); } });
@@ -285,6 +285,7 @@ vol.addEventListener('input', () => { au.volume = +vol.value; setP(vol, vol.valu
 setP(vol, 100);
 
 function tick() {
+  lyricSync();
   const d = au.duration, c = au.currentTime;
   const p = isFinite(d) && d > 0 ? c / d : 0;
   mini.querySelector('.prog i').style.setProperty('--p', p * 100 + '%');
@@ -309,11 +310,25 @@ function ui() {
   }
   $$('.tr[data-tid]').forEach(r => r.classList.toggle('now', !!tr && r.dataset.tid === tr.id));
   if (np.classList.contains('mode-queue')) npPanel('queue');
+  if (np.classList.contains('mode-lyrics') && S.lyFor !== (tr && tr.id)) npPanel('lyrics');
 }
 function npPanel(mode) {
-  const el = $('.nppanel', np);
-  if (mode === 'lyrics') el.innerHTML = `<div class="ly">${t('lyrics')}</div>`;
-  else { const k = reg(P.q); el.innerHTML = `<h3>${t('queue')}</h3><div class="tl">` + P.q.map((x, i) => rowHTML(x, i, k, { cur: i === P.i, noMore: 1 })).join('') + '</div>'; }
+  const el = $('.nppanel', np), tr = cur();
+  if (mode === 'lyrics') {
+    S.lyFor = tr && tr.id; lyLines = null; lyIdx = -1;
+    if (!tr) { el.innerHTML = `<div class="ly">${t('lyrics')}</div>`; return; }
+    el.innerHTML = `<div class="ly">${ja ? '歌詞を検索中…' : 'Searching lyrics…'}</div>`;
+    fetchLyrics(tr).then(L => {
+      if (!cur() || cur().id !== tr.id || !np.classList.contains('mode-lyrics')) return;
+      if (L && L.synced && tr.src !== 'itunes') { lyLines = L.synced; el.innerHTML = `<div class="lyw">${L.synced.map(l => `<div class="lyl" data-t="${l.t}">${esc(l.x) || '♪'}</div>`).join('')}</div>`; }
+      else if (L && (L.plain || L.synced)) { const txt = L.plain || L.synced.map(l => l.x).join('\n'); el.innerHTML = `<div class="lyw lyp">${esc(txt).replace(/\n/g, '<br>')}</div>`; }
+      else el.innerHTML = `<div class="ly">${t('lyrics')}</div>`;
+      lyricSync(true);
+    });
+  } else {
+    const k = reg(P.q);
+    el.innerHTML = `<h3><span>${t('queue')}</span><button class="pbtn glass" data-act="qclear">${ja ? '次の曲を消去' : 'Clear Next'}</button></h3><div class="tl">` + P.q.map((x, i) => rowHTML(x, i, k, { cur: i === P.i, noMore: 1, qrm: i !== P.i })).join('') + '</div>';
+  }
 }
 function npMode(m) {
   const on = !np.classList.contains('mode-' + m);
@@ -345,10 +360,11 @@ mini.addEventListener('click', e => {
   else ctl(k);
 });
 np.addEventListener('click', e => {
+  const ll = e.target.closest('.lyl'); if (ll) { au.currentTime = +ll.dataset.t; au.play().catch(() => {}); return; }
   const b = e.target.closest('[data-n]'); if (!b) return; const k = b.dataset.n;
   if (k === 'close') closeNP(); else if (k === 'lyrics' || k === 'queue') npMode(k);
   else if (k === 'fav') { const tr = cur(); if (tr) toggleFav(tr); }
-  else if (k === 'more') { if (cur()) { const r = b.getBoundingClientRect(); trackMenu(cur(), r.right - 240, r.bottom + 6); } }
+  else if (k === 'more') { if (cur()) { const r = b.getBoundingClientRect(); trackMenu(cur(), r.right - 240, r.bottom + 6, null, true); } }
   else if (k === 'route') toast(ja ? 'このデバイスで再生中' : 'Playing on this device');
   else ctl(k);
 });
@@ -394,7 +410,7 @@ function ask(title, ph = '', val = '', ph2) {
 /* ============ 共通UI部品 ============ */
 const reg = list => { const k = 'l' + (++S.lk); S.lists[k] = list; return k; };
 function rowHTML(tr, i, k, o = {}) {
-  return `<div class="tr${o.cur ? ' now' : ''}" data-act="play" data-l="${k}" data-i="${i}" data-tid="${esc(tr.id)}">${o.num ? `<span class="tn">${i + 1}</span>` : cov(tr, 'sm')}<div class="ti"><b>${esc(tr.title)}</b><small>${esc(tr.artist)}${tr.album && !o.noAlbum ? ' — ' + esc(tr.album) : ''}</small></div><span class="td">${tr.dur ? fmt(tr.dur) : ''}</span>${o.noMore ? '' : `<button class="ib" data-act="more" data-l="${k}" data-i="${i}">${ic('ellipsis')}</button>`}</div>`;
+  return `<div class="tr${o.cur ? ' now' : ''}" data-act="play" data-l="${k}" data-i="${i}" data-tid="${esc(tr.id)}">${o.num ? `<span class="tn">${i + 1}</span>` : cov(tr, 'sm')}<div class="ti"><b>${esc(tr.title)}</b><small>${esc(tr.artist)}${tr.album && !o.noAlbum ? ' — ' + esc(tr.album) : ''}</small></div><span class="td">${tr.dur ? fmt(tr.dur) : ''}</span>${o.qrm ? `<button class="ib" data-act="qrm" data-i="${i}">${ic('xmark')}</button>` : o.noMore ? '' : `<button class="ib" data-act="more" data-l="${k}" data-i="${i}">${ic('ellipsis')}</button>`}</div>`;
 }
 function rows(list, o = {}) {
   const k = reg(list), c = cur();
@@ -422,7 +438,7 @@ function trackMenu(tr, x, y, list, fromPlayer) {
   else items.push({ label: t('rmLib'), icon: 'trash', danger: true, act: async () => { await removeFromLib(r.id); render(); } });
   const m = /^pl:(.+)$/.exec(S.route);
   if (m && !fromPlayer) { const p = playlists.find(p => p.id === m[1]); if (p) items.push({ label: t('rmPl'), icon: 'xmark', act: () => { p.songs = p.songs.filter(id => id !== r.id); saveAll(); render(); } }); }
-  if (fromPlayer) items.push('-', glassItem());
+  if (fromPlayer) items.push('-', speedItem(), sleepItem(), glassItem());
   menu(x, y, items);
 }
 
@@ -634,6 +650,8 @@ document.addEventListener('click', async e => {
     case 'name': { const n = await ask(t('yourName'), t('name'), uname); if (n !== null) { uname = n; LS.set('name', n); renderSidebar(); if (S.route === 'home') render(); } break; }
     case 'seg': S.src = d.s; $$('.seg button').forEach(b => b.classList.toggle('on', b === a)); doSearch(); break;
     case 'cat': S.q = d.q; { const i = $('#q'); if (i) i.value = d.q; } doSearch(); break;
+    case 'qrm': { const i = +d.i; if (i !== P.i) { P.q.splice(i, 1); if (i < P.i) P.i--; npPanel('queue'); } break; }
+    case 'qclear': P.q.splice(P.i + 1); npPanel('queue'); break;
     case 'station': station(d.term); break;
     case 'jamkey': { const k = await ask('Jamendo client_id', 'client_id', jamKey()); if (k) { LS.set('jamendo', k); doSearch(); } break; }
     case 'upload': $('#file').click(); break;
@@ -745,7 +763,7 @@ function openLens(pid, x) {
   if (cloneEl) cloneEl.remove();
   cloneEl = real.cloneNode(true); cloneEl.removeAttribute('style'); cloneEl.classList.add('lensc'); cloneEl.style.width = real.offsetWidth + 'px';
   $('.lensv', lens).prepend(cloneEl);
-  if (glassOn() && $('#rfdefs')) { const lh = lens.offsetHeight; try { rfFilter({ id: 'rfl', w: Math.round(LW), h: lh, B: Math.min(lh * .3, 17), k: .9 }); $('.lensv', lens).style.filter = 'url(#rfl)'; } catch {} } else $('.lensv', lens).style.filter = '';
+  if (glassOn() && $('#rfdefs')) { const lh = lens.offsetHeight; try { const nid = rfFilter({ id: 'rfl', w: Math.round(LW), h: lh, B: Math.min(lh * .3, 17), k: .9 }); $('.lensv', lens).style.filter = 'url(#' + nid + ')'; const o = document.getElementById(lensFid); if (o) o.remove(); lensFid = nid; } catch {} } else $('.lensv', lens).style.filter = '';
   lX.x = lX.t = act.offsetLeft + act.offsetWidth / 2; lX.v = 0;
   lS.x = .8; lS.v = 0; lS.t = 1.32; lO.x = .02; lO.t = 1; pS.t = 1;
   try { $('#topbar').setPointerCapture(pid); } catch {}
@@ -793,10 +811,40 @@ function closeLens() {
   tp.addEventListener('pointerup', end); tp.addEventListener('pointercancel', end);
 })();
 
+/* ============ 歌詞(LRCLIB) / 再生速度 / スリープタイマー ============ */
+const lyc = new Map(); let lyLines = null, lyIdx = -1;
+function parseLrc(x) { if (!x) return null; const out = []; for (const line of x.split('\n')) { const m = /^\[(\d+):(\d+(?:\.\d+)?)\](.*)$/.exec(line.trim()); if (m) out.push({ t: +m[1] * 60 + +m[2], x: m[3].trim() }); } return out.length ? out : null; }
+async function fetchLyrics(tr) {
+  if (lyc.has(tr.id)) return lyc.get(tr.id);
+  const q = `track_name=${encodeURIComponent(tr.title)}&artist_name=${encodeURIComponent(tr.artist)}`; let res = null;
+  try {
+    let r = await fetch(`https://lrclib.net/api/get?${q}${tr.album ? '&album_name=' + encodeURIComponent(tr.album) : ''}${tr.dur && tr.src !== 'itunes' ? '&duration=' + Math.round(tr.dur) : ''}`);
+    if (r.ok) res = await r.json();
+    if (!res || (!res.syncedLyrics && !res.plainLyrics)) { r = await fetch(`https://lrclib.net/api/search?${q}`); if (r.ok) { const arr = await r.json(); res = arr.find(x => x.syncedLyrics) || arr.find(x => x.plainLyrics) || null; } }
+  } catch {}
+  const out = res ? { synced: parseLrc(res.syncedLyrics), plain: res.plainLyrics || '' } : null;
+  lyc.set(tr.id, out); return out;
+}
+function lyricSync(force) {
+  if (!lyLines || !np.classList.contains('mode-lyrics')) return;
+  const c = au.currentTime + .25; let i = -1;
+  for (let k = 0; k < lyLines.length; k++) { if (lyLines[k].t <= c) i = k; else break; }
+  if (i === lyIdx && !force) return; lyIdx = i;
+  const panel = $('.nppanel', np), rows = $$('.lyl', panel);
+  rows.forEach((r, k) => { r.classList.toggle('on', k === i); r.classList.toggle('past', k < i); });
+  const a = rows[i]; if (a) panel.scrollTo({ top: a.offsetTop - panel.clientHeight / 2 + a.offsetHeight / 2, behavior: 'smooth' });
+}
+const RATES = [.75, 1, 1.25, 1.5, 2];
+const speedItem = () => ({ label: (ja ? '再生速度: ' : 'Speed: ') + au.playbackRate + '×', icon: 'clock', sub: RATES.map(r => ({ label: r + '×' + (au.playbackRate === r ? ' ✓' : ''), icon: 'play', act: () => { au.defaultPlaybackRate = r; au.playbackRate = r; au.preservesPitch = true; toast((ja ? '再生速度 ' : 'Speed ') + r + '×'); } })) });
+let sleepT = 0;
+function fadePause() { const v = au.volume; let i = 0; const iv = setInterval(() => { i++; au.volume = Math.max(0, v * (1 - i / 30)); if (i >= 30) { clearInterval(iv); au.pause(); au.volume = v; } }, 100); }
+function setSleep(sec) { clearTimeout(sleepT); S.sleepEnd = false; if (!sec) return toast(ja ? 'スリープタイマー オフ' : 'Sleep timer off'); toast((ja ? 'スリープタイマー ' : 'Sleep timer ') + Math.round(sec / 60) + (ja ? '分' : ' min')); sleepT = setTimeout(fadePause, sec * 1000); }
+const sleepItem = () => ({ label: ja ? 'スリープタイマー' : 'Sleep Timer', icon: 'clock', sub: [15, 30, 45, 60].map(m => ({ label: m + (ja ? '分' : ' min'), icon: 'clock', act: () => setSleep(m * 60) })).concat([{ label: ja ? 'この曲の終わりまで' : 'End of Track', icon: 'clock', act: () => { clearTimeout(sleepT); S.sleepEnd = true; toast(ja ? 'この曲の後に停止します' : 'Will stop after this track'); } }, { label: ja ? 'オフ' : 'Off', icon: 'xmark', act: () => setSleep(0) }]) });
+
 /* ============ Liquid Glass 背景屈折(ミニプレイヤー / 上部タブバー) ============
    背後のコンテンツ(#main)を複製してガラス内に敷き、縁だけ強く曲げる変位マップ(SVG feDisplacementMap)で屈折。
    RGBで曲げ量をずらして色収差も出す。backdrop-filter+url()が使えないSafari/iPadでも動く方式。 */
-const RF = []; let rfRaf = 0, rfUntil = 0, rfT = 0, rfS = 0;
+const RF = []; let RFG = 0, lensFid = '', rfRaf = 0, rfUntil = 0, rfT = 0, rfS = 0;
 const SVGNS = 'http://www.w3.org/2000/svg';
 const glassOn = () => LS.get('rf', 'on') !== 'off';
 const glassItem = () => ({ label: (ja ? 'ガラスの屈折効果: ' : 'Glass refraction: ') + (glassOn() ? (ja ? 'オン' : 'On') : (ja ? 'オフ' : 'Off')), icon: glassOn() ? 'check' : 'xmark', act: () => { LS.set('rf', glassOn() ? 'off' : 'on'); document.body.classList.toggle('rf-off', !glassOn()); if (glassOn()) { rfClone(); rfSizes(); } toast(glassOn() ? (ja ? '屈折効果 オン' : 'Refraction on') : (ja ? '屈折効果 オフ' : 'Refraction off')); } });
@@ -820,21 +868,20 @@ function rfMap(w, h, B) {
 }
 function rfFilter(r) {
   const { w, h, B } = r, url = rfMap(w, h, B), S0 = 2 * B * (r.k || 1.3); /* 縁の曲げ量=B*1.3: 縁の幅を超えて折り返し、文字が外側へ流れ反転して見える */
-  const old = document.getElementById(r.id); if (old) old.remove();
+  const nid = r.id + 'g' + (++RFG);
   const f = document.createElementNS(SVGNS, 'filter');
-  f.id = r.id; f.setAttribute('x', 0); f.setAttribute('y', 0); f.setAttribute('width', w); f.setAttribute('height', h);
+  f.id = nid; f.setAttribute('x', 0); f.setAttribute('y', 0); f.setAttribute('width', w); f.setAttribute('height', h);
   f.setAttribute('filterUnits', 'userSpaceOnUse'); f.setAttribute('color-interpolation-filters', 'sRGB');
   const ch = (k, sc, m) => `<feDisplacementMap in="SourceGraphic" in2="m" scale="${sc}" xChannelSelector="R" yChannelSelector="G" result="d${k}"/><feColorMatrix in="d${k}" type="matrix" values="${m}" result="c${k}"/>`;
   f.innerHTML = `<feImage href="${url}" xlink:href="${url}" x="0" y="0" width="${w}" height="${h}" preserveAspectRatio="none" result="m"/>`
     + ch('r', S0, '1 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 1 0') + ch('g', S0 * .92, '0 0 0 0 0 0 1 0 0 0 0 0 0 0 0 0 0 0 1 0') + ch('b', S0 * .84, '0 0 0 0 0 0 0 0 0 0 0 0 1 0 0 0 0 0 1 0')
     + '<feBlend in="cr" in2="cg" mode="screen" result="rg"/><feBlend in="rg" in2="cb" mode="screen"/>';
-  $('#rfdefs').appendChild(f);
+  $('#rfdefs').appendChild(f); return nid;
 }
 function rfSizes() {
   RF.forEach(r => {
     const w = r.el.offsetWidth, h = r.el.offsetHeight; if (!w || !h || (w === r.w && h === r.h)) return;
-    r.w = w; r.h = h; r.B = Math.min(h * .4, 24); r.k = 1.6; try { rfFilter(r); } catch {}
-    r.rfm.style.filter = r.rfm.style.webkitFilter = `url(#${r.id})`; /* Safariはurl()に他のフィルタを連結すると無効になることがあるため単独で指定 */
+    r.w = w; r.h = h; r.B = Math.min(h * .4, 24); r.k = 1.6; try { const nid = rfFilter(r); r.rfm.style.filter = r.rfm.style.webkitFilter = `url(#${nid})`; if (r.cur) { const o = document.getElementById(r.cur); if (o) o.remove(); } r.cur = nid; } catch {}
   });
 }
 function rfClone() {
