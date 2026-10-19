@@ -74,9 +74,29 @@ const cov = (tr, cls = '') => {
   return u ? `<div class="cov ${cls}" style="background-image:url('${esc(u)}')"></div>`
     : `<div class="cov ${cls} gen" style="--h:${hue((tr && (tr.album || tr.title)) || 'x')}">${ic('note')}</div>`;
 };
-const slim = tr => tr.blob ? { id: tr.id, local: 1 } : { id: tr.id, title: tr.title, artist: tr.artist, album: tr.album, art: typeof tr.art === 'string' ? tr.art : null, url: tr.url, src: tr.src, dur: tr.dur, cid: tr.cid };
+const slim = tr => tr.blob ? { id: tr.id, local: 1 } : { id: tr.id, title: tr.title, artist: tr.artist, album: tr.album, art: typeof tr.art === 'string' ? tr.art : null, url: tr.url, src: tr.src, dur: tr.dur, cid: tr.cid, yt: tr.yt };
 const unslim = m => m.local ? lib.get(m.id) : m;
 const fromIt = r => ({ id: 'it' + r.trackId, title: r.trackName, artist: r.artistName, album: r.collectionName || '', dur: 0, url: r.previewUrl, art: (r.artworkUrl100 || '').replace('100x100', '600x600') || null, src: 'itunes', cid: r.collectionId });
+/* --- YouTube (公開のPiped / Invidiousインスタンス経由で検索・音声ストリーム取得。インスタンスは落ちることがあるため複数を並行して試す) --- */
+const PIPED = ['https://pipedapi.kavin.rocks', 'https://pipedapi.adminforge.de', 'https://api.piped.private.coffee', 'https://pipedapi.leptons.xyz', 'https://pipedapi.nosebs.ru'];
+const INV = ['https://yewtu.be', 'https://inv.nadeko.net', 'https://invidious.nerdvpn.de', 'https://invidious.privacyredirect.com'];
+const anyOf = (urls, parse) => Promise.any(urls.map(async u => { const r = await fetch(u, { signal: AbortSignal.timeout(8000) }); if (!r.ok) throw new Error(r.status); return parse(await r.json(), u); }));
+const ytTrack = (id, title, artist, dur, art) => ({ id: 'yt' + id, yt: id, title, artist: (artist || 'YouTube').replace(/ - Topic$/, ''), album: 'YouTube', dur: dur || 0, url: null, art: art || `https://i.ytimg.com/vi/${id}/hqdefault.jpg`, src: 'youtube' });
+async function ytSearch(q) {
+  const enc = encodeURIComponent(q);
+  const run = async f => anyOf(PIPED.map(b => `${b}/search?q=${enc}&filter=${f}`), j => { const l = (j.items || []).filter(i => i.url && /watch\?v=/.test(i.url)); if (!l.length) throw 0; return l.map(i => ytTrack(i.url.split('v=')[1].split('&')[0], i.title, i.uploaderName, i.duration, i.thumbnail)); });
+  try { return await run('music_songs'); } catch {}
+  try { return await run('videos'); } catch {}
+  return anyOf(INV.map(b => `${b}/api/v1/search?q=${enc}&type=video`), j => { if (!j.length) throw 0; return j.map(v => ytTrack(v.videoId, v.title, v.author, v.lengthSeconds, v.videoThumbnails && v.videoThumbnails[0] && v.videoThumbnails[0].url)); });
+}
+const ytCache = {};
+async function ytStream(id) {
+  if (ytCache[id]) return ytCache[id];
+  let u;
+  try { u = await anyOf(PIPED.map(b => `${b}/streams/${id}`), j => { const a = (j.audioStreams || []).filter(s => /mp4|aac|m4a/i.test(s.mimeType || '')).sort((x, y) => y.bitrate - x.bitrate)[0] || (j.audioStreams || [])[0]; if (!a) throw 0; return a.url; }); }
+  catch { u = await anyOf(INV.map(b => `${b}/api/v1/videos/${id}?local=true`), (j, base) => { const a = (j.adaptiveFormats || []).filter(f => /audio\/mp4/.test(f.type || '')).sort((x, y) => (+y.bitrate) - (+x.bitrate))[0]; if (!a) throw 0; return a.url.startsWith('http') ? a.url : base + a.url; }); }
+  return ytCache[id] = u;
+}
 const AUD = 'https://api.audius.co/v1';
 const APP = 'ipad_music_pwa';
 const fromAu = r => ({ id: 'au' + r.id, title: r.title, artist: r.user && r.user.name || '', album: r.genre || '', dur: r.duration || 0, url: `${AUD}/tracks/${r.id}/stream?app_name=${APP}`, art: r.artwork && (r.artwork['480x480'] || r.artwork['1000x1000'] || r.artwork['150x150']) || null, src: 'audius' });
@@ -217,7 +237,10 @@ const cur = () => P.q[P.i];
 function play(list, i) { P.q = list.slice(); P.i = i; P.hist = []; load(); }
 function load() {
   const tr = cur(); if (!tr) return;
-  au.src = audioUrl(tr); au.play().catch(() => {});
+  if (tr.src === 'youtube' && !tr.blob) {
+    au.pause(); au.removeAttribute('src'); const id = tr.id; toast(ja ? 'YouTubeから読み込み中…' : 'Loading from YouTube…', 6000);
+    ytStream(tr.yt).then(u => { if (cur() && cur().id === id) { au.src = u; au.play().catch(() => {}); } }).catch(() => { if (cur() && cur().id === id) toast(ja ? 'YouTubeの音声を取得できませんでした(公開サーバーが混雑している可能性があります)' : 'Could not get YouTube audio (public servers may be busy)', 4000); });
+  } else { au.src = audioUrl(tr); au.play().catch(() => {}); }
   recent = [slim(tr), ...recent.filter(m => m.id !== tr.id)].slice(0, 60); LS.set('recent', recent);
   cnt[tr.id] = (cnt[tr.id] || 0) + 1; LS.set('cnt', cnt);
   sess(tr); ui();
@@ -299,7 +322,7 @@ function tick() {
 let preFor = null, preA = null, lastSave = 0;
 function preNext() {
   const d = au.duration; if (!isFinite(d) || d - au.currentTime > 20 || P.shuffle) return;
-  const n = P.q[P.i + 1]; if (!n || n.blob || preFor === n.id) return;
+  const n = P.q[P.i + 1]; if (!n || n.blob || n.src === 'youtube' || preFor === n.id) return;
   preFor = n.id; try { preA = new Audio(); preA.preload = 'auto'; preA.src = audioUrl(n); } catch {}
 }
 function saveResume() {
@@ -310,6 +333,7 @@ function restoreResume() {
   const r = LS.get('resume', null); if (!r || !r.q) return;
   const q = r.q.map(unslim).filter(Boolean); if (!q.length || !q[r.i]) return;
   P.q = q; P.i = r.i; const tr = cur();
+  if (tr.src === 'youtube') { sess(tr); ui(); return; }
   au.src = audioUrl(tr); au.addEventListener('loadedmetadata', () => { try { au.currentTime = r.t || 0; } catch {} }, { once: true });
   sess(tr); ui();
 }
@@ -446,7 +470,7 @@ function rows(list, o = {}) {
   const k = reg(list), c = cur();
   return `<div class="tl">${list.map((tr, i) => rowHTML(tr, i, k, { ...o, cur: c && c.id === tr.id })).join('')}</div>`;
 }
-const head = (title, right = '', back) => `<header class="ph"><div style="display:flex;align-items:center">${back ? `<button class="ib backb" data-act="back">${ic('chevl')}</button>` : ''}<h1>${esc(title)}</h1></div><div class="pha">${right}<button class="pav" data-act="settings" aria-label="Profile">${ic('person')}</button></div></header>`;
+const head = (title, right = '', back) => `<header class="ph"><div style="display:flex;align-items:center">${back ? `<button class="ib backb" data-act="back">${ic('chevl')}</button>` : ''}<h1>${esc(title)}</h1></div><div class="pha">${right}<button class="pav" data-act="account" aria-label="Account">${ic('person')}</button></div></header>`;
 const spinner = `<div class="ctr"><svg class="ios-spin" viewBox="0 0 40 40" aria-label="Loading">${[...Array(8)].map((_, i) => `<rect x="18" y="2.500" width="4" height="10" rx="2" transform="rotate(${i * 45} 20 20)" opacity="${(.18 + i * .115).toFixed(2)}"/>`).join('')}</svg></div>`;
 const tile = (img, title, sub, attrs, tr) => `<div class="tile" ${attrs}>${img ? `<div class="cov" style="background-image:url('${esc(img)}')"></div>` : cov(tr)}<b>${esc(title)}</b><small>${esc(sub || '')}</small></div>`;
 const albumTile = r => tile((r.artworkUrl100 || '').replace('100x100', '400x400'), r.collectionName, r.artistName, `data-act="go" data-r="ialbum:${r.collectionId}"`);
@@ -467,7 +491,7 @@ async function saveOffline(r) {
 }
 function songInfo(r) {
   const m = $('#modal'), f = (l, v) => v ? `<div class="srw"><span>${l}</span><em>${esc(String(v))}</em></div>` : '';
-  const SRC = { itunes: 'iTunes (30s)', audius: 'Audius', upload: ja ? '端末' : 'This device', archive: 'Internet Archive', commons: 'Wikimedia Commons', jamendo: 'Jamendo', url: 'URL' };
+  const SRC = { itunes: 'iTunes (30s)', youtube: 'YouTube', audius: 'Audius', upload: ja ? '端末' : 'This device', archive: 'Internet Archive', commons: 'Wikimedia Commons', jamendo: 'Jamendo', url: 'URL' };
   m.innerHTML = `<div class="dlg glass info"><div class="ihead">${cov(r, 'sm')}<div><b>${esc(r.title)}</b><small>${esc(r.artist)}</small></div></div><div class="sgp">${f(ja ? 'アルバム' : 'Album', r.album)}${f(ja ? '長さ' : 'Duration', r.dur ? fmt(r.dur) : '')}${f(ja ? '配信元' : 'Source', SRC[r.src] || r.src)}${f(ja ? '再生回数' : 'Plays', cnt[r.id] || 0)}${f(ja ? '保存' : 'Storage', r.blob ? (ja ? 'この端末(' + (r.blob.size / 1048576).toFixed(1) + ' MB)' : 'On device (' + (r.blob.size / 1048576).toFixed(1) + ' MB)') : (ja ? 'ストリーミング' : 'Streaming'))}${f(ja ? '形式' : 'Format', r.blob ? r.blob.type : '')}</div><div class="btns"><button data-v="1" class="pri">${t('done')}</button></div></div>`;
   m.classList.add('show'); m.onclick = e => { if (e.target === m || e.target.closest('button')) m.classList.remove('show'); };
 }
@@ -533,6 +557,7 @@ function buildPhone() {
   const pt = $('.pt', el);
   pt.addEventListener('pointerdown', e => {
     const b = e.target.closest('.ptrow button'); if (!b || (e.pointerType === 'mouse' && e.button)) return;
+    if (document.body.classList.contains('min')) return;
     qDown = { x: e.clientX, y: e.clientY }; clearTimeout(qT);
     const pid = e.pointerId, x0 = e.clientX; qT = setTimeout(() => { if (qDown) qOpen(pid, x0, b); }, 320);
   });
@@ -542,7 +567,7 @@ function buildPhone() {
   });
   const end = () => { clearTimeout(qT); if (qOn) qClose(); qDown = null; };
   pt.addEventListener('pointerup', end); pt.addEventListener('pointercancel', end);
-  el.addEventListener('click', e => { if (qGuard) { e.stopPropagation(); e.preventDefault(); } }, true);
+  el.addEventListener('click', e => { if (qGuard) { e.stopPropagation(); e.preventDefault(); return; } if (document.body.classList.contains('min') && e.target.closest('.pt')) { e.stopPropagation(); e.preventDefault(); document.body.classList.remove('min'); } }, true);
 }
 const qX = new Spr(0, 520, 34), qS = new Spr(.8, 380, 15, .002, .02), qO = new Spr(0, 520, 50, .01, .05), qSPR = [qX, qS, qO];
 let qOn = false, qLW = 100, qHov = null, qClone = null, qT = 0, qRaf = 0, qLast = 0, qDown = null, qGuard = false, qFid = null;
@@ -606,6 +631,16 @@ function renderPhone() {
   const on = $('.ptrow button.on', el), sel = $('.ptsel', el);
   if (on) qSel(on); else sel.style.opacity = 0;
 }
+let lastSY = 0;
+function phoneScroll() {
+  if (!document.body.classList.contains('phone')) return;
+  const y = main.scrollTop, d = y - lastSY;
+  if (y < 30) document.body.classList.remove('min');
+  else if (d > 14) { document.body.classList.add('min'); lastSY = y; }
+  else if (d < -14) { document.body.classList.remove('min'); lastSY = y; }
+  if (Math.abs(d) > 14 || y < 30) lastSY = y;
+}
+main.addEventListener('scroll', phoneScroll, { passive: true });
 function applyPhone() {
   const p = isPhone(); document.body.classList.toggle('phone', p);
   if (p) { setSB(false); renderPhone(); rfSizes(); rfKick(600); }
@@ -623,7 +658,7 @@ function renderSidebar() {
       ${grp('lib', t('library'), grp('pins', t('pins'), pinHTML) + LIBN.map(([r, i, l]) => ni(r, i, t(l))).join(''))}
       ${grp('pls', t('playlists'), ni('playlists', 'grid', t('allPl')) + ni('fav', 'star', t('fav')) + pl)}
       <div style="height:12px"></div></div>
-    <div class="profrow"><button class="prof" data-act="name"><span class="avatar">${ic('person')}</span><span>${esc(uname || t('name'))}</span></button><button class="ib" data-act="settings" aria-label="Settings">${ic('sliders')}</button></div>`;
+    <div class="profrow"><button class="prof" data-act="account"><span class="avatar">${ic('person')}</span><span>${esc(uname || t('name'))}</span></button><button class="ib" data-act="settings" aria-label="Settings">${ic('sliders')}</button></div>`;
 }
 
 /* ============ 画面: ホーム ============ */
@@ -654,8 +689,8 @@ const CATS = [['Pop', 'pop'], ['Hits', 'hits'], ['J-POP', 'j-pop'], ['Alternativ
 const catHTML = () => CATS.map(([n, q], i) => `<div class="cat" style="--h:${(i * 47 + 340) % 360}" data-act="cat" data-q="${esc(q)}"><span>${n}</span>${ic('note')}</div>`).join('');
 let sTimer;
 function vSearch(el) {
-  const seg = [['audius', 'Audius'], ['archive', 'Internet Archive'], ['commons', 'Wikimedia'], ['jamendo', 'Jamendo'], ['itunes', ja ? 'iTunes(30秒)' : 'iTunes (30s)'], ['lib', t('library')]];
-  el.innerHTML = `<div class="sbar"><label class="glass sin">${ic('search')}<input id="q" type="search" placeholder="${t('searchPh')}" value="${esc(S.q)}" autocomplete="off" enterkeyhint="search"></label><div class="seg glass">${seg.map(([k, l]) => `<button class="${S.src === k ? 'on' : ''}" data-act="seg" data-s="${k}">${l}</button>`).join('')}</div></div><div id="res"></div>`;
+  const seg = [['audius', 'Audius'], ['archive', 'Internet Archive'], ['youtube', 'YouTube'], ['commons', 'Wikimedia'], ['jamendo', 'Jamendo'], ['itunes', ja ? 'iTunes(30秒)' : 'iTunes (30s)'], ['lib', t('library')]];
+  el.innerHTML = `<div class="sbar"><label class="glass sin">${ic('search')}<input id="q" type="search" placeholder="${t('searchPh')}" value="${esc(S.q)}" autocomplete="off" enterkeyhint="search"></label><button class="ib glass sxb" data-act="sclr" aria-label="Clear">${ic('xmark')}</button><div class="seg glass">${seg.map(([k, l]) => `<button class="${S.src === k ? 'on' : ''}" data-act="seg" data-s="${k}">${l}</button>`).join('')}</div></div><div class="pseg"><div class="seg2p glass"><button class="${S.src !== 'lib' ? 'on' : ''}" data-act="seg" data-s="${S.on || 'audius'}">${ja ? 'オンライン' : 'Online'}</button><button class="${S.src === 'lib' ? 'on' : ''}" data-act="seg" data-s="lib">${t('library')}</button></div>${S.src !== 'lib' ? `<div class="chips2">${seg.slice(0, 6).map(([k, l]) => `<button class="${S.src === k ? 'on' : ''}" data-act="seg" data-s="${k}">${l}</button>`).join('')}</div>` : ''}</div><div id="res"></div>`;
   $('#q', el).addEventListener('input', e => { S.q = e.target.value; clearTimeout(sTimer); sTimer = setTimeout(doSearch, 350); });
   doSearch();
 }
@@ -663,7 +698,7 @@ async function doSearch() {
   const res = $('#res'); if (!res || S.route !== 'search') return;
   const my = ++S.tok, q = S.q.trim(); S.lists = {}; S.lk = 0;
   if (q.length > 1) { shist = [q, ...shist.filter(x => x !== q)].slice(0, 8); LS.set('shist', shist); }
-  if (!q && S.src !== 'lib') { res.innerHTML = (shist.length ? `<h2>${t('hist')}</h2><div class="chips">${shist.map(h => `<button data-act="cat" data-q="${esc(h)}">${ic('clock')}${esc(h)}</button>`).join('')}<button data-act="clrh">${t('clear')}</button></div>` : '') + `<h2>${t('browse')}</h2><div class="cats">${catHTML()}</div>`; return; }
+  if (!q && S.src !== 'lib') { res.innerHTML = (shist.length ? `<div class="hhead"><h2>${ja ? '最近検索された項目' : 'Recent Searches'}</h2><button data-act="clrh">${t('clear')}</button></div><div class="tl hrows">${shist.map(h => `<div class="tr" data-act="cat" data-q="${esc(h)}"><span class="hico">${ic('search')}</span><div class="ti"><b>${esc(h)}</b><small>${ja ? '検索' : 'Search'}</small></div><button class="ib" data-act="rmh" data-q="${esc(h)}" aria-label="Remove">${ic('xmark')}</button></div>`).join('')}</div>` : '') + `<h2>${t('browse')}</h2><div class="cats">${catHTML()}</div>`; return; }
   if (S.src === 'lib') {
     const ql = q.toLowerCase(), l = [...lib.values()].filter(x => !ql || (x.title + ' ' + x.artist + ' ' + x.album).toLowerCase().includes(ql));
     res.innerHTML = l.length ? rows(l) : emptyHTML('search', q ? t('noRes') : t('noSongs')); return;
@@ -673,6 +708,9 @@ async function doSearch() {
     if (S.src === 'itunes') {
       const [songs, als] = await Promise.all([itSongs(q, 30), itAlbums(q, 12)]); if (my !== S.tok) return;
       res.innerHTML = (als.length ? `<h2>${t('albums')}</h2><div class="hs">${als.map(albumTile).join('')}</div>` : '') + (songs.length ? `<h2>${t('songs')}</h2>${rows(songs)}` : '') || emptyHTML('search', t('noRes'));
+    } else if (S.src === 'youtube') {
+      const songs = await ytSearch(q); if (my !== S.tok) return;
+      res.innerHTML = songs.length ? rows(songs) : emptyHTML('search', t('noRes'));
     } else if (S.src === 'archive') {
       const items = await iaSearch(q); if (my !== S.tok) return;
       res.innerHTML = items.length ? `<div class="grid">${items.map(r => tile(`https://archive.org/services/img/${encodeURIComponent(r.identifier)}`, r.title || r.identifier, [].concat(r.creator || '').join(', '), `data-act="go" data-r="iaitem:${esc(r.identifier)}"`)).join('')}</div>` : emptyHTML('search', t('noRes'));
@@ -829,7 +867,10 @@ document.addEventListener('click', async e => {
     case 'edit': S.edit = !S.edit; renderSidebar(); break;
     case 'unpin': pins.splice(+d.i, 1); saveAll(); renderSidebar(); break;
     case 'name': { const n = await ask(t('yourName'), t('name'), uname); if (n !== null) { uname = n; LS.set('name', n); renderSidebar(); if (S.route === 'home') render(); } break; }
-    case 'seg': S.src = d.s; $$('.seg button').forEach(b => b.classList.toggle('on', b === a)); doSearch(); break;
+    case 'sclr': S.q = ''; { const i = $('#q'); if (i) { i.value = ''; i.blur(); } } doSearch(); break;
+    case 'rmh': shist = shist.filter(x => x !== d.q); LS.set('shist', shist); doSearch(); break;
+    case 'account': openAccount(); break;
+    case 'seg': S.src = d.s; if (d.s !== 'lib') S.on = d.s; if ($('.pseg')) { render(); break; } $$('.seg button').forEach(b => b.classList.toggle('on', b === a)); doSearch(); break;
     case 'cat': S.q = d.q; { const i = $('#q'); if (i) i.value = d.q; } doSearch(); break;
     case 'clrh': shist = []; LS.set('shist', shist); render(); break;
     case 'settings': openSettings(); break;
@@ -1025,6 +1066,33 @@ const SECS = [
   [['appearance', 'contrast', '#ffffff', ['外観', 'Appearance']], ['glass', 'stack', '#40c8e0', ['Liquid Glass', 'Liquid Glass']], ['display', 'sunfill', '#0a84ff', ['画面表示と文字サイズ', 'Display & Text Size']], ['access', 'access', '#0a84ff', ['アクセシビリティ', 'Accessibility']]],
   [['library', 'ptlib', '#ff9f0a', ['ライブラリ', 'Library']], ['about', 'gear', '#aeaeb2', ['情報', 'About']]],
 ];
+function openAccount() {
+  let el = $('#acct'); if (el) el.remove();
+  el = document.createElement('div'); el.id = 'acct'; document.body.appendChild(el);
+  const close = () => { el.classList.remove('show'); setTimeout(() => el.remove(), 420); };
+  const row = (l, ic2, act, chev) => `<button class="arow" data-a="${act}">${ic2 ? `<span class="ai">${ic(ic2)}</span>` : ''}<span>${l}</span>${chev ? `<b>${ic('chevr')}</b>` : ''}</button>`;
+  const pill = (l, i, act) => `<button class="apill" data-a="${act}">${ic(i)}<span>${l}</span></button>`;
+  el.innerHTML = `<div class="ash"><div class="ahd"><span class="alogo">${ic('note')}</span><h2>${ja ? 'アカウント' : 'Account'}</h2><button class="sx glass" data-a="close" aria-label="Close">${ic('xmark')}</button></div>
+    <div class="abody"><button class="aprof" data-a="profile"><span class="avatar">${ic('person')}</span><span><b>${esc(uname || t('name'))}</b><small>${ja ? 'プロフィール、設定' : 'Profile & settings'}</small></span><b class="chv">${ic('chevr')}</b></button>
+    <button class="abig" data-a="upload">${ja ? 'ライブラリに曲を追加' : 'Add Music to Library'}</button><p class="aft">${ja ? '端末のファイルやURLから、あなたのライブラリに追加できます。' : 'Add files from your device or a URL.'}</p>
+    <div class="agrp">${row(ja ? '再生履歴' : 'Play History', '', 'hist', 1)}${row(ja ? 'よく再生した項目' : 'Most Played', '', 'top', 1)}</div>
+    <div class="apills">${pill(ja ? 'アップロード' : 'Upload', 'upload', 'upload')}${pill(ja ? 'URLを追加' : 'Add URL', 'link', 'url')}${pill(ja ? 'アプリを共有' : 'Share App', 'share', 'share')}</div>
+    <div class="agrp blue">${row(ja ? 'お気に入りの曲' : 'Favorite Songs', 'star', 'fav')}${row(ja ? 'ミュージック設定' : 'Music Settings', 'gear', 'settings')}</div></div></div>`;
+  requestAnimationFrame(() => el.classList.add('show'));
+  el.onclick = async e => {
+    if (e.target === el) return close();
+    const b = e.target.closest('[data-a]'); if (!b) return; const a = b.dataset.a;
+    if (a === 'close') return close();
+    if (a === 'profile') { close(); openSettings('profile'); }
+    else if (a === 'settings') { close(); openSettings(); }
+    else if (a === 'upload') { $('#file').click(); }
+    else if (a === 'url') { close(); const r = await ask(t('addUrl'), t('urlPh'), '', t('titlePh')); if (r && /^https?:\/\//i.test(r[0])) { const [url, title] = r; await addToLib({ id: uid('ur'), title: title || decodeURIComponent(url.split('/').pop().split('?')[0]) || url, artist: new URL(url).hostname, album: ja ? '外部URL' : 'Web', dur: 0, url, art: null, src: 'url' }); render(); } }
+    else if (a === 'share') doShare('Music', ja ? '音楽プレイヤーPWA' : 'Music PWA', location.href.split('#')[0]);
+    else if (a === 'hist') { close(); go('top'); }
+    else if (a === 'top') { close(); go('top'); }
+    else if (a === 'fav') { close(); go('fav'); }
+  };
+}
 function openSettings(start) {
   let el = $('#settings'); if (el) el.remove();
   el = document.createElement('div'); el.id = 'settings'; document.body.appendChild(el);
@@ -1042,7 +1110,7 @@ function openSettings(start) {
     playback: () => grp('', trow(ja ? '自動再生' : 'Autoplay', 'auto', ST.auto) + trow(ja ? '再生位置を記憶' : 'Remember Playback', 'resume', ST.resume), ja ? '自動再生をオンにすると、キューが終わったあと同じアーティストの曲が続けて再生されます。' : 'When the queue ends, similar songs keep playing.')
       + grp(ja ? '再生速度' : 'Playback Speed', `<div class="seg2">${RT.map(r => `<button data-do="rate:${r}" class="${au.playbackRate === r ? 'on' : ''}">${r}×</button>`).join('')}</div>`)
       + grp(ja ? 'スリープタイマー' : 'Sleep Timer', [15, 30, 45, 60].map(m => btn(m + (ja ? '分' : ' min'), 'sleep:' + m)).join('') + btn(ja ? 'この曲の終わりまで' : 'End of Track', 'sleep:end') + btn(ja ? 'オフ' : 'Off', 'sleep:0')),
-    sources: () => grp(ja ? '検索の既定ソース' : 'Default Search Source', [['audius', 'Audius', ja ? 'フル再生・無料' : 'Full tracks'], ['archive', 'Internet Archive', ja ? 'フル再生' : 'Full tracks'], ['commons', 'Wikimedia Commons', ja ? 'フル再生' : 'Full tracks'], ['jamendo', 'Jamendo', 'client_id'], ['itunes', 'iTunes', ja ? '30秒プレビュー' : '30s previews'], ['lib', t('library'), '']].map(([k, n, d]) => `<div class="srw act" data-do="src:${k}"><span>${n}${d ? `<small> ${d}</small>` : ''}</span>${S.src === k ? `<b class="ckm">${ic('check')}</b>` : ''}</div>`).join(''))
+    sources: () => grp(ja ? '検索の既定ソース' : 'Default Search Source', [['audius', 'Audius', ja ? 'フル再生・無料' : 'Full tracks'], ['youtube', 'YouTube', ja ? '公開サーバー経由' : 'Via public servers'], ['archive', 'Internet Archive', ja ? 'フル再生' : 'Full tracks'], ['commons', 'Wikimedia Commons', ja ? 'フル再生' : 'Full tracks'], ['jamendo', 'Jamendo', 'client_id'], ['itunes', 'iTunes', ja ? '30秒プレビュー' : '30s previews'], ['lib', t('library'), '']].map(([k, n, d]) => `<div class="srw act" data-do="src:${k}"><span>${n}${d ? `<small> ${d}</small>` : ''}</span>${S.src === k ? `<b class="ckm">${ic('check')}</b>` : ''}</div>`).join(''))
       + grp('Jamendo', `<div class="srw act" data-do="jam"><span>client_id</span><em>${jamKey() ? (ja ? '設定済み' : 'Set') : (ja ? '未設定' : 'Not set')}</em><b>${ic('chevr')}</b></div>`, ja ? 'developer.jamendo.com で無料のclient_idを取得できます。' : 'Get a free client_id at developer.jamendo.com.'),
     appearance: () => grp('', `<div class="apr">${['light', 'dark'].map(k => { const on = ST.ap === 'auto' ? (effDark() === (k === 'dark')) : ST.ap === k;
         return `<button data-ap="${k}" class="apo"><div class="pv ${k}"><span>9:41</span><i></i><i></i></div><div>${k === 'light' ? (ja ? 'ライト' : 'Light') : (ja ? 'ダーク' : 'Dark')}</div><div class="rd${on ? ' on' : ''}">${on ? ic('check') : ''}</div></button>`; }).join('')}</div>${trow(ja ? '自動' : 'Automatic', 'auto2', ST.ap === 'auto')}`, ja ? '“自動” では、端末の設定に合わせてライトとダークが切り替わります。' : 'Automatic follows your device setting.')
