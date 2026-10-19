@@ -258,10 +258,11 @@ const cur = () => P.q[P.i];
 function play(list, i) { P.q = list.slice(); P.i = i; P.hist = []; load(); }
 function load() {
   const tr = cur(); if (!tr) return;
-  if (tr.src === 'youtube' && !tr.blob) {
-    au.pause(); au.removeAttribute('src'); const id = tr.id; toast(ja ? 'YouTubeから読み込み中…' : 'Loading from YouTube…', 6000);
+  if (tr.src === 'youtube' && !tr.blob && !tr._noembed) { au.pause(); ytPlay(tr); }
+  else if (tr.src === 'youtube' && !tr.blob) {
+    ytOff(); au.pause(); au.removeAttribute('src'); const id = tr.id; toast(ja ? 'YouTubeから読み込み中…' : 'Loading from YouTube…', 6000);
     ytStream(tr.yt).then(u => { if (cur() && cur().id === id) { au.src = u; au.play().catch(() => {}); } }).catch(() => { if (cur() && cur().id === id) toast(ja ? 'YouTubeの音声を取得できませんでした(公開サーバーが混雑している可能性があります)' : 'Could not get YouTube audio (public servers may be busy)', 4000); });
-  } else { au.src = audioUrl(tr); au.play().catch(() => {}); }
+  } else { ytOff(); au.src = audioUrl(tr); au.play().catch(() => {}); }
   recent = [slim(tr), ...recent.filter(m => m.id !== tr.id)].slice(0, 60); LS.set('recent', recent);
   cnt[tr.id] = (cnt[tr.id] || 0) + 1; LS.set('cnt', cnt);
   sess(tr); ui();
@@ -290,6 +291,51 @@ au.addEventListener('error', () => {
   const c = cur();
   if (c && c.src === 'youtube' && !c.blob && !c._retry && au.getAttribute('src')) { c._retry = 1; delete ytCache[c.yt]; toast(ja ? '別のサーバーで再試行中…' : 'Retrying with another server…', 5000); ytStream(c.yt, true).then(u => { if (cur() === c) { au.src = u; au.play().catch(() => {}); } }).catch(() => toast(ja ? 'この動画は再生できません' : 'Cannot play this video', 3500)); return; }
   if (cur()) { toast(t('unsupported')); setTimeout(() => P.i + 1 < P.q.length && next(), 800); } });
+/* --- YouTube IFrame Player API をバックエンドにして、既存の <audio> インターフェースを差し替える --- */
+const YT = { on: false, p: null, ready: false, pending: null, st: -1, t: 0, d: 0, rate: 1, vol: 1, iv: 0, loading: false };
+const ytEv = n => au.dispatchEvent(new Event(n));
+function ytEnsure() {
+  if (YT.p || YT.loading) return; YT.loading = true;
+  let box = $('#ytp'); if (!box) { box = document.createElement('div'); box.id = 'ytp'; box.innerHTML = '<div id="ytpl"></div>'; document.body.prepend(box); }
+  const make = () => { YT.p = new window.YT.Player('ytpl', { width: 220, height: 220, playerVars: { playsinline: 1, controls: 0, disablekb: 1, fs: 0, rel: 0, modestbranding: 1, origin: location.protocol.startsWith('http') ? location.origin : undefined }, events: {
+    onReady: () => { YT.ready = true; if (YT.pending) { const id = YT.pending; YT.pending = null; YT.p.loadVideoById(id); } },
+    onStateChange: e => ytState(e.data),
+    onError: e => { const c = cur(); if (c && c.src === 'youtube') { c._noembed = 1; toast(ja ? '埋め込み再生できないため別の方法で再生します' : 'Embedding blocked; trying another way', 3000); ytOff(); load(); } } } }); };
+  if (window.YT && window.YT.Player) make();
+  else { window.onYouTubeIframeAPIReady = make; const s = document.createElement('script'); s.src = 'https://www.youtube.com/iframe_api'; s.onerror = () => { YT.loading = false; toast(ja ? 'YouTubeプレイヤーを読み込めませんでした' : 'Could not load the YouTube player', 3000); }; document.head.appendChild(s); }
+}
+function ytState(s) {
+  const was = YT.st; YT.st = s;
+  if (s === 1 && was !== 1) { ytEv('loadedmetadata'); ytEv('play'); }
+  else if (s === 2 && was !== 2) ytEv('pause');
+  else if (s === 0) { ytEv('pause'); ytEv('ended'); }
+}
+function ytOn() {
+  if (YT.on) return; YT.on = true;
+  const d = (k, desc) => Object.defineProperty(au, k, { configurable: true, ...desc });
+  d('paused', { get: () => !(YT.st === 1 || YT.st === 3) });
+  d('currentTime', { get: () => YT.t, set: v => { try { YT.p && YT.p.seekTo(+v, true); YT.t = +v; } catch {} } });
+  d('duration', { get: () => YT.d || NaN });
+  d('playbackRate', { get: () => YT.rate, set: v => { YT.rate = +v; try { YT.p && YT.p.setPlaybackRate(+v); } catch {} } });
+  d('volume', { get: () => YT.vol, set: v => { YT.vol = +v; try { YT.p && YT.p.setVolume(+v * 100); } catch {} } });
+  d('play', { value: () => { try { YT.p && YT.p.playVideo(); } catch {} return Promise.resolve(); } });
+  d('pause', { value: () => { try { YT.p && YT.p.pauseVideo(); } catch {} } });
+  clearInterval(YT.iv);
+  YT.iv = setInterval(() => { if (!YT.ready || !YT.p) return; try { YT.t = YT.p.getCurrentTime() || 0; const dd = YT.p.getDuration() || 0; if (dd && dd !== YT.d) { YT.d = dd; ytEv('loadedmetadata'); } if (YT.st === 1) ytEv('timeupdate'); } catch {} }, 250);
+}
+function ytOff() {
+  if (!YT.on) return; YT.on = false; clearInterval(YT.iv);
+  try { YT.p && YT.p.stopVideo(); } catch {}
+  ['paused', 'currentTime', 'duration', 'playbackRate', 'volume', 'play', 'pause'].forEach(k => { try { delete au[k]; } catch {} });
+  YT.st = -1; YT.t = 0; YT.d = 0;
+}
+function ytPlay(tr) {
+  ytOn(); YT.t = 0; YT.d = tr.dur || 0; YT.st = -1; ytEnsure();
+  if (YT.ready) { YT.p.loadVideoById(tr.yt); try { YT.p.setPlaybackRate(YT.rate); } catch {} }
+  else YT.pending = tr.yt;
+  ytEv('timeupdate');
+  setTimeout(() => { if (cur() === tr && YT.on && YT.st !== 1 && YT.st !== 3) toast(ja ? '再生ボタンを押してください' : 'Tap play to start', 2500); }, 3500);
+}
 function sess(tr) {
   if (!('mediaSession' in navigator)) return;
   try {
@@ -733,7 +779,7 @@ async function doSearch() {
       const [songs, als] = await Promise.all([itSongs(q, 30), itAlbums(q, 12)]); if (my !== S.tok) return;
       res.innerHTML = (als.length ? `<h2>${t('albums')}</h2><div class="hs">${als.map(albumTile).join('')}</div>` : '') + (songs.length ? `<h2>${t('songs')}</h2>${rows(songs)}` : '') || emptyHTML('search', t('noRes'));
     } else if (S.src === 'youtube') {
-      const songs = await ytSearch(q); if (my !== S.tok) return;
+      ytEnsure(); const songs = await ytSearch(q); if (my !== S.tok) return;
       res.innerHTML = songs.length ? rows(songs) : emptyHTML('search', t('noRes'));
     } else if (S.src === 'archive') {
       const items = await iaSearch(q); if (my !== S.tok) return;

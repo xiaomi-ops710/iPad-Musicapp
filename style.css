@@ -692,3 +692,6 @@ body.phone .ps{margin-left:auto}
 /* v23: 選択カプセルを控えめに */
 body.phone .ptsel,.ptsel{background:rgba(255,255,255,.13)!important;box-shadow:inset 0 0 0 .5px rgba(255,255,255,.22),0 1px 6px rgba(0,0,0,.12)!important}
 @media(prefers-color-scheme:light){body.phone .ptsel,.ptsel{background:rgba(0,0,0,.06)!important;box-shadow:inset 0 0 0 .5px rgba(0,0,0,.06)!important}}
+
+#ytp{position:fixed;left:0;top:0;width:220px;height:220px;z-index:-1;pointer-events:none;overflow:hidden}
+#ytp iframe{width:220px;height:220px;border:0}
