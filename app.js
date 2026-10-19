@@ -81,8 +81,21 @@ const fromIt = r => ({ id: 'it' + r.trackId, title: r.trackName, artist: r.artis
 const PIPED = ['https://pipedapi.kavin.rocks', 'https://pipedapi.adminforge.de', 'https://api.piped.private.coffee', 'https://pipedapi.leptons.xyz', 'https://pipedapi.nosebs.ru'];
 const INV = ['https://yewtu.be', 'https://inv.nadeko.net', 'https://invidious.nerdvpn.de', 'https://invidious.privacyredirect.com'];
 const anyOf = (urls, parse) => Promise.any(urls.map(async u => { const r = await fetch(u, { signal: AbortSignal.timeout(8000) }); if (!r.ok) throw new Error(r.status); return parse(await r.json(), u); }));
-const ytTrack = (id, title, artist, dur, art) => ({ id: 'yt' + id, yt: id, title, artist: (artist || 'YouTube').replace(/ - Topic$/, ''), album: 'YouTube', dur: dur || 0, url: null, art: art || `https://i.ytimg.com/vi/${id}/hqdefault.jpg`, src: 'youtube' });
+const ytTrack = (id, title, artist, dur, art) => ({ id: 'yt' + id, yt: id, title, artist: (artist || 'YouTube').replace(/ - Topic$/, ''), album: 'YouTube', dur: dur || 0, url: null, art: `https://i.ytimg.com/vi/${id}/mqdefault.jpg`, src: 'youtube' });
+const ytKey = () => (LS.get('ytkey', '') || '').trim();
+const isoDur = s => { const m = /PT(?:(\d+)H)?(?:(\d+)M)?(?:(\d+)S)?/.exec(s || ''); return m ? (+m[1] || 0) * 3600 + (+m[2] || 0) * 60 + (+m[3] || 0) : 0; };
+async function ytApiSearch(q, key) {
+  const r = await fetch(`https://www.googleapis.com/youtube/v3/search?part=snippet&type=video&videoCategoryId=10&maxResults=25&q=${encodeURIComponent(q)}&key=${encodeURIComponent(key)}`);
+  if (!r.ok) throw new Error('api ' + r.status);
+  const items = ((await r.json()).items || []).filter(i => i.id && i.id.videoId); if (!items.length) throw 0;
+  let dur = {};
+  try { const d = await (await fetch(`https://www.googleapis.com/youtube/v3/videos?part=contentDetails&id=${items.map(i => i.id.videoId).join(',')}&key=${encodeURIComponent(key)}`)).json(); (d.items || []).forEach(v => dur[v.id] = isoDur(v.contentDetails && v.contentDetails.duration)); } catch {}
+  const dec = s => { const e = document.createElement('textarea'); e.innerHTML = s || ''; return e.value; };
+  return items.map(i => ytTrack(i.id.videoId, dec(i.snippet.title), dec(i.snippet.channelTitle), dur[i.id.videoId] || 0));
+}
 async function ytSearch(q) {
+  const key = ytKey();
+  if (key) { try { return await ytApiSearch(q, key); } catch (e) { toast(ja ? 'YouTube APIで検索できなかったため、公開サーバーで検索します' : 'YouTube API failed; using public servers', 3000); } }
   const enc = encodeURIComponent(q);
   const run = async f => anyOf(PIPED.map(b => `${b}/search?q=${enc}&filter=${f}`), j => { const l = (j.items || []).filter(i => i.url && /watch\?v=/.test(i.url)); if (!l.length) throw 0; return l.map(i => ytTrack(i.url.split('v=')[1].split('&')[0], i.title, i.uploaderName, i.duration, i.thumbnail)); });
   try { return await run('music_songs'); } catch {}
@@ -90,10 +103,18 @@ async function ytSearch(q) {
   return anyOf(INV.map(b => `${b}/api/v1/search?q=${enc}&type=video`), j => { if (!j.length) throw 0; return j.map(v => ytTrack(v.videoId, v.title, v.author, v.lengthSeconds, v.videoThumbnails && v.videoThumbnails[0] && v.videoThumbnails[0].url)); });
 }
 const ytCache = {};
-async function ytStream(id) {
-  if (ytCache[id]) return ytCache[id];
+async function ytStream(id, invOnly) {
+  if (ytCache[id] && !invOnly) return ytCache[id];
   let u;
-  try { u = await anyOf(PIPED.map(b => `${b}/streams/${id}`), j => { const a = (j.audioStreams || []).filter(s => /mp4|aac|m4a/i.test(s.mimeType || '')).sort((x, y) => y.bitrate - x.bitrate)[0] || (j.audioStreams || [])[0]; if (!a) throw 0; return a.url; }); }
+  try {
+    if (invOnly) throw 0;
+    u = await anyOf(PIPED.map(b => `${b}/streams/${id}`), j => {
+      const a = (j.audioStreams || []).filter(s => /mp4|aac|m4a/i.test(s.mimeType || '')).sort((x, y) => y.bitrate - x.bitrate)[0]; if (!a) throw 0;
+      const x = new URL(a.url);
+      if (j.proxyUrl) { const p = new URL(j.proxyUrl); x.searchParams.set('host', x.hostname); x.protocol = p.protocol; x.hostname = p.hostname; x.port = p.port; }
+      return x.href;
+    });
+  }
   catch { u = await anyOf(INV.map(b => `${b}/api/v1/videos/${id}?local=true`), (j, base) => { const a = (j.adaptiveFormats || []).filter(f => /audio\/mp4/.test(f.type || '')).sort((x, y) => (+y.bitrate) - (+x.bitrate))[0]; if (!a) throw 0; return a.url.startsWith('http') ? a.url : base + a.url; }); }
   return ytCache[id] = u;
 }
@@ -265,7 +286,10 @@ au.addEventListener('pause', () => { document.body.classList.remove('playing'); 
 au.addEventListener('ended', () => { if (S.sleepEnd) { S.sleepEnd = false; au.pause(); ui(); return; } next(true); });
 au.addEventListener('timeupdate', tick);
 au.addEventListener('loadedmetadata', () => { const tr = cur(); if (tr && isFinite(au.duration) && !tr.dur) tr.dur = au.duration; tick(); });
-au.addEventListener('error', () => { if (cur()) { toast(t('unsupported')); setTimeout(() => P.i + 1 < P.q.length && next(), 800); } });
+au.addEventListener('error', () => {
+  const c = cur();
+  if (c && c.src === 'youtube' && !c.blob && !c._retry && au.getAttribute('src')) { c._retry = 1; delete ytCache[c.yt]; toast(ja ? '別のサーバーで再試行中…' : 'Retrying with another server…', 5000); ytStream(c.yt, true).then(u => { if (cur() === c) { au.src = u; au.play().catch(() => {}); } }).catch(() => toast(ja ? 'この動画は再生できません' : 'Cannot play this video', 3500)); return; }
+  if (cur()) { toast(t('unsupported')); setTimeout(() => P.i + 1 < P.q.length && next(), 800); } });
 function sess(tr) {
   if (!('mediaSession' in navigator)) return;
   try {
@@ -1111,6 +1135,7 @@ function openSettings(start) {
       + grp(ja ? '再生速度' : 'Playback Speed', `<div class="seg2">${RT.map(r => `<button data-do="rate:${r}" class="${au.playbackRate === r ? 'on' : ''}">${r}×</button>`).join('')}</div>`)
       + grp(ja ? 'スリープタイマー' : 'Sleep Timer', [15, 30, 45, 60].map(m => btn(m + (ja ? '分' : ' min'), 'sleep:' + m)).join('') + btn(ja ? 'この曲の終わりまで' : 'End of Track', 'sleep:end') + btn(ja ? 'オフ' : 'Off', 'sleep:0')),
     sources: () => grp(ja ? '検索の既定ソース' : 'Default Search Source', [['audius', 'Audius', ja ? 'フル再生・無料' : 'Full tracks'], ['youtube', 'YouTube', ja ? '公開サーバー経由' : 'Via public servers'], ['archive', 'Internet Archive', ja ? 'フル再生' : 'Full tracks'], ['commons', 'Wikimedia Commons', ja ? 'フル再生' : 'Full tracks'], ['jamendo', 'Jamendo', 'client_id'], ['itunes', 'iTunes', ja ? '30秒プレビュー' : '30s previews'], ['lib', t('library'), '']].map(([k, n, d]) => `<div class="srw act" data-do="src:${k}"><span>${n}${d ? `<small> ${d}</small>` : ''}</span>${S.src === k ? `<b class="ckm">${ic('check')}</b>` : ''}</div>`).join(''))
+      + grp('YouTube Data API v3', `<div class="srw act" data-do="ytkey"><span>${ja ? 'APIキー' : 'API Key'}</span><em>${ytKey() ? '••••' + ytKey().slice(-4) : (ja ? '未設定' : 'Not set')}</em><b>${ic('chevr')}</b></div>` + (ytKey() ? btn(ja ? 'APIキーを削除' : 'Remove API Key', 'ytclr', 1) : ''), ja ? 'キーを入力すると、YouTubeの検索はAPIを優先して使います(失敗時は公開サーバーに自動で切り替え)。未入力の場合は従来どおり公開サーバーで検索します。音声の再生は、どちらの場合も公開サーバー経由です。キーはこの端末にのみ保存されます。' : 'With a key, YouTube search uses the API first and falls back to public servers. Playback always goes through public servers. The key stays on this device.')
       + grp('Jamendo', `<div class="srw act" data-do="jam"><span>client_id</span><em>${jamKey() ? (ja ? '設定済み' : 'Set') : (ja ? '未設定' : 'Not set')}</em><b>${ic('chevr')}</b></div>`, ja ? 'developer.jamendo.com で無料のclient_idを取得できます。' : 'Get a free client_id at developer.jamendo.com.'),
     appearance: () => grp('', `<div class="apr">${['light', 'dark'].map(k => { const on = ST.ap === 'auto' ? (effDark() === (k === 'dark')) : ST.ap === k;
         return `<button data-ap="${k}" class="apo"><div class="pv ${k}"><span>9:41</span><i></i><i></i></div><div>${k === 'light' ? (ja ? 'ライト' : 'Light') : (ja ? 'ダーク' : 'Dark')}</div><div class="rd${on ? ' on' : ''}">${on ? ic('check') : ''}</div></button>`; }).join('')}</div>${trow(ja ? '自動' : 'Automatic', 'auto2', ST.ap === 'auto')}`, ja ? '“自動” では、端末の設定に合わせてライトとダークが切り替わります。' : 'Automatic follows your device setting.')
@@ -1169,6 +1194,8 @@ function openSettings(start) {
     if (a === 'rate') { const r = +v; au.defaultPlaybackRate = r; au.playbackRate = r; au.preservesPitch = true; }
     else if (a === 'sleep') { if (v === 'end') { S.sleepEnd = true; toast(ja ? 'この曲の終わりで停止' : 'Stops at end of track'); } else setSleep(+v * 60); }
     else if (a === 'src') { S.src = v; }
+    else if (a === 'ytkey') { const k = await ask('YouTube Data API v3', ja ? 'APIキー(AIza…)' : 'API key (AIza…)', ytKey()); if (k) LS.set('ytkey', k.trim()); }
+    else if (a === 'ytclr') { LS.set('ytkey', ''); toast(ja ? '削除しました' : 'Removed'); }
     else if (a === 'jam') { const k = await ask('Jamendo client_id', 'client_id', jamKey()); if (k) LS.set('jamendo', k); }
     else if (a === 'clrrecent') { recent = []; LS.set('recent', recent); toast(ja ? '消去しました' : 'Cleared'); }
     else if (a === 'clrcnt') { cnt = {}; LS.set('cnt', cnt); toast(ja ? 'リセットしました' : 'Reset'); }
