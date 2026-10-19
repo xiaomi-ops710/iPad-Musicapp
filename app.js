@@ -1002,9 +1002,9 @@ function applyExtra() {
 }
 const effDark = () => ST.ap === 'dark' || (ST.ap === 'auto' && matchMedia('(prefers-color-scheme: dark)').matches);
 const SECS = [
-  [['playback', 'play', '#fa2d48', ['再生', 'Playback']], ['sources', 'link', '#0a84ff', ['音楽サービス', 'Music Services']]],
-  [['appearance', 'circlehalf', '#3a3a3c', ['外観', 'Appearance']], ['glass', 'stack', '#30b0c7', ['Liquid Glass', 'Liquid Glass']], ['display', 'sun', '#0a84ff', ['画面表示と文字サイズ', 'Display & Text Size']], ['access', 'person2', '#0a84ff', ['アクセシビリティ', 'Accessibility']]],
-  [['library', 'note', '#ff9f0a', ['ライブラリ', 'Library']], ['about', 'info', '#8e8e93', ['情報', 'About']]],
+  [['playback', 'note', '#ff375f', ['再生', 'Playback']], ['sources', 'globe', '#0a84ff', ['音楽サービス', 'Music Services']]],
+  [['appearance', 'contrast', '#ffffff', ['外観', 'Appearance']], ['glass', 'stack', '#40c8e0', ['Liquid Glass', 'Liquid Glass']], ['display', 'sunfill', '#0a84ff', ['画面表示と文字サイズ', 'Display & Text Size']], ['access', 'access', '#0a84ff', ['アクセシビリティ', 'Accessibility']]],
+  [['library', 'ptlib', '#ff9f0a', ['ライブラリ', 'Library']], ['about', 'gear', '#aeaeb2', ['情報', 'About']]],
 ];
 function openSettings(start) {
   let el = $('#settings'); if (el) el.remove();
@@ -1041,7 +1041,7 @@ function openSettings(start) {
   const left = () => {
     const ql = q.toLowerCase(), g = SECS.map(gr => gr.filter(s => !ql || L(s[3]).toLowerCase().includes(ql))).filter(gr => gr.length);
     return `<button class="sprof${sec === 'profile' ? ' on' : ''}" data-sec="profile"><span class="avatar">${ic('person')}</span><span><b>${esc(uname || t('name'))}</b><small>${ja ? 'プロフィールを編集' : 'Edit profile'}</small></span></button>`
-      + g.map(gr => `<div class="slg">${gr.map(s => `<button class="sli${sec === s[0] ? ' on' : ''}" data-sec="${s[0]}"><span class="sico" style="background:${s[2]}">${ic(s[1])}</span><span>${L(s[3])}</span></button>`).join('')}</div>`).join('') || `<p class="sft">${ja ? '該当なし' : 'No results'}</p>`;
+      + g.map(gr => `<div class="slg">${gr.map(s => `<button class="sli${sec === s[0] ? ' on' : ''}" data-sec="${s[0]}"><span class="sico" style="--g:${s[2]}">${ic(s[1])}</span><span>${L(s[3])}</span></button>`).join('')}</div>`).join('') || `<p class="sft">${ja ? '該当なし' : 'No results'}</p>`;
   };
   const draw = (keep) => {
     const sc = keep ? $('.srb', el)?.scrollTop : 0;

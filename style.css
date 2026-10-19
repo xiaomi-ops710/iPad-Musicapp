@@ -571,7 +571,7 @@ body.noanim *{animation-duration:.01ms!important;transition-duration:.01ms!impor
 .slg{margin-bottom:22px}
 .sli{display:flex;align-items:center;gap:14px;width:100%;height:56px;padding:0 14px;border-radius:99px;font-size:18px;text-align:left;transition:background .25s}
 .sli.on{background:rgba(120,120,128,.24)}
-.sico{width:36px;height:36px;border-radius:10px;display:grid;place-items:center;color:#fff;font-size:21px;flex:none;box-shadow:inset 0 0 0 .5px rgba(255,255,255,.18)}
+.sico{display:grid;place-items:center;flex:none}
 #settings .sr{flex:1;min-width:0;display:flex;flex-direction:column}
 #settings .sr .sbar{height:calc(70px + var(--sat))}
 #settings .sback{display:none}
@@ -605,3 +605,11 @@ body.noanim *{animation-duration:.01ms!important;transition-duration:.01ms!impor
 }
 .srw b.ckm{color:var(--acc);font-size:22px;opacity:1}
 .srw.srs{flex-wrap:nowrap;min-height:64px}.srw.srs input.gs{width:auto;flex:1;min-width:0}.srw.srs>span{flex:none}
+
+/* ===== v19: 設定アイコン(ダークのスクワークル+色付きグリフ) ===== */
+:root{--tilebg:#f4f4f6}
+@media(prefers-color-scheme:dark){:root{--tilebg:#161618}}
+.sico{width:42px;height:42px;border-radius:12px;font-size:26px;color:var(--g);background:linear-gradient(160deg,#fff,#e3e3e8);box-shadow:inset 0 0 0 .5px rgba(0,0,0,.12),0 1px 2px rgba(0,0,0,.12)}
+@media(prefers-color-scheme:dark){.sico{background:linear-gradient(160deg,#2e2e31,#151517);box-shadow:inset 0 0 0 .5px rgba(255,255,255,.14),inset 0 1px 0 rgba(255,255,255,.1),0 1px 3px rgba(0,0,0,.5)}}
+.sico .ic{filter:drop-shadow(0 0 4px color-mix(in srgb,var(--g) 40%,transparent))}
+.sli{height:60px}
