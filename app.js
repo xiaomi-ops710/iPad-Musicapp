@@ -447,7 +447,7 @@ function rows(list, o = {}) {
   return `<div class="tl">${list.map((tr, i) => rowHTML(tr, i, k, { ...o, cur: c && c.id === tr.id })).join('')}</div>`;
 }
 const head = (title, right = '', back) => `<header class="ph"><div style="display:flex;align-items:center">${back ? `<button class="ib backb" data-act="back">${ic('chevl')}</button>` : ''}<h1>${esc(title)}</h1></div><div class="pha">${right}<button class="pav" data-act="settings" aria-label="Profile">${ic('person')}</button></div></header>`;
-const spinner = '<div class="ctr"><div class="spin"></div></div>';
+const spinner = `<div class="ctr"><svg class="ios-spin" viewBox="0 0 40 40" aria-label="Loading">${[...Array(8)].map((_, i) => `<rect x="18" y="2.500" width="4" height="10" rx="2" transform="rotate(${i * 45} 20 20)" opacity="${(.18 + i * .115).toFixed(2)}"/>`).join('')}</svg></div>`;
 const tile = (img, title, sub, attrs, tr) => `<div class="tile" ${attrs}>${img ? `<div class="cov" style="background-image:url('${esc(img)}')"></div>` : cov(tr)}<b>${esc(title)}</b><small>${esc(sub || '')}</small></div>`;
 const albumTile = r => tile((r.artworkUrl100 || '').replace('100x100', '400x400'), r.collectionName, r.artistName, `data-act="go" data-r="ialbum:${r.collectionId}"`);
 const emptyHTML = (icon, msg) => `<div class="empty">${ic(icon)}${msg}</div>`;
@@ -612,7 +612,8 @@ async function vHome(el, _, tok) {
   const nm = uname || t('name');
   const station = `<div class="pick station" data-act="station" data-term="__mix"><svg class="art" viewBox="0 0 100 133" preserveAspectRatio="xMidYMid slice"><polygon points="-6,6 62,66 -6,126" fill="#ffb11f"/><polygon points="6,28 42,66 6,104" fill="#ff7a1a"/><polygon points="14,44 28,66 14,88" fill="#ff4d2e"/></svg><small>${t('madeFor')}</small><b>${esc(nm)}${t('station')}</b></div>`;
   const mood = `<div class="pick mood" data-act="station" data-term="${ja ? 'リラックス' : 'relax chill'}"><svg class="art" viewBox="0 0 100 133" preserveAspectRatio="xMidYMid slice"><g fill="none" stroke="#fff" stroke-width="1.4" opacity=".9"><ellipse cx="55" cy="26" rx="22" ry="9"/><ellipse cx="50" cy="50" rx="36" ry="14"/><ellipse cx="46" cy="82" rx="44" ry="20"/></g></svg><small>${t('moodFor')}</small><b>${t('relax')}</b><p>${t('relaxD')}</p></div>`;
-  el.innerHTML = head(t('home')) + `<h2>${t('topPicks')}</h2><div class="hs" id="picks">${station}${mood}</div>
+  const rp = topTracks(5), replay = rp.length ? `<div class="pick replay" data-act="go" data-r="top"><i>Replay</i><strong>${ja ? 'あなたの<br>ベスト' : 'Your<br>Best'}</strong><small>${esc([...new Set(rp.map(x => x.artist))].slice(0, 4).join(', '))}</small></div>` : '';
+  el.innerHTML = head(t('home')) + `<h2>${t('topPicks')}</h2><div class="hs" id="picks">${replay}${station}${mood}</div>
     <h2>${t('recent')} ${ic('chevr')}</h2><div id="rec"></div><div id="heavy"></div><div id="charts"></div><div id="trend"></div>`;
   const rl = recent.map(unslim).filter(Boolean).slice(0, 14);
   $('#rec', el).innerHTML = rl.length ? `<div class="hs">${rl.map((tr, i) => { const k = reg(rl); return tile(null, tr.title, tr.artist, `data-act="play" data-l="${k}" data-i="${i}"`, tr); }).join('')}</div>` : `<small>${t('noRecent')}</small>`;
@@ -679,8 +680,10 @@ async function vNew(el, _, tok) {
     $('#n1', el).innerHTML = `<h2>${ja ? '新作アルバム' : 'New Albums'}</h2><div class="hs">${a.map(albumTile).join('')}</div><h2>${ja ? 'ピックアップ' : 'Featured'}</h2><div class="hs">${b.map(albumTile).join('')}</div>${c.length ? `<h2>${t('trending')}</h2><div class="hs">${c.map((x, i) => tile(null, x.title, x.artist, `data-act="play" data-l="${k}" data-i="${i}"`, x)).join('')}</div>` : ''}`;
   } catch { $('#n1', el).innerHTML = emptyHTML('grid', t('err')); }
 }
+const RSTA = [['Chill', 'chill lofi', '#00c2e0', 'chill'], ['1', 'pop hits', '#ff1d2d', 'one'], ['HITS', 'top hits', '#1d5bff', 'hits'], ['COUNTRY', 'country', '#ffb400', 'country'], ['UNO', 'latin pop', '#ff2d8a', 'uno'], ['club', 'dance club', '#111', 'club']];
+const RLIVE = [[ja ? 'ポップ・ナウ' : 'Pop Now', ja ? 'いま聴きたいポップを一挙に' : 'The pop you want to hear right now', 'pop', 'linear-gradient(135deg,#ff5e62,#ff9966)'], [ja ? 'ジャズ・ラウンジ' : 'Jazz Lounge', ja ? '夜に寄り添うジャズ' : 'Late night jazz', 'jazz', 'linear-gradient(135deg,#41295a,#2f0743)'], [ja ? 'ヒップホップ・ライブ' : 'Hip-Hop Live', ja ? '最新のヒップホップ' : 'Latest in hip-hop', 'hip hop', 'linear-gradient(135deg,#0f2027,#2c5364)'], [ja ? 'アニメ・ステーション' : 'Anime Station', ja ? 'アニメソング特集' : 'Anime songs', 'anime', 'linear-gradient(135deg,#f093fb,#f5576c)']];
 function vRadio(el) {
-  el.innerHTML = head(t('radio')) + `<div class="cats">${CATS.map(([n, q], i) => `<div class="cat" style="--h:${(i * 47 + 200) % 360}" data-act="station" data-term="${esc(q)}"><span>${n} ${ja ? 'ステーション' : 'Station'}</span>${ic('radio')}</div>`).join('')}</div>`;
+  el.innerHTML = head(t('radio')) + `<div class="rtiles">${RSTA.map(([n, q, c, k]) => `<div class="rtile" data-act="station" data-term="${esc(q)}"><b class="rt-${k}" style="color:${c}">${esc(n)}</b><small>${ic('radio')} Radio</small></div>`).join('')}</div><h2>${ja ? 'オンエア中' : 'On Air'}</h2><div class="hs">${RLIVE.map(([n, d, q, g]) => `<div class="rlive" style="background:${g}" data-act="station" data-term="${esc(q)}"><small>${ja ? 'ライブ' : 'LIVE'}</small><b>${esc(n)}</b><p>${esc(d)}</p></div>`).join('')}</div><h2>${ja ? 'ジャンル別ステーション' : 'Genre Stations'}</h2>` + `<div class="cats">${CATS.map(([n, q], i) => `<div class="cat" style="--h:${(i * 47 + 200) % 360}" data-act="station" data-term="${esc(q)}"><span>${n} ${ja ? 'ステーション' : 'Station'}</span>${ic('radio')}</div>`).join('')}</div>`;
 }
 async function station(term) {
   if (term === '__mix') {
@@ -967,7 +970,7 @@ function closeLens() {
 })();
 
 /* ============ 設定(外観・アクセント・Liquid Glass調整) ============ */
-const DEF = { ap: 'auto', acc: '#fa2d48', refr: 1, blur: 1.2, lg: .5, bold: 0, rp: 0, fs: 1 };
+const DEF = { ap: 'auto', acc: '#fa2d48', refr: 1, blur: 1.2, lg: .5, bold: 0, rp: 0, rm: 0, fs: 1, auto: 0, resume: 1 };
 const ST = Object.assign({}, DEF, LS.get('set', {}));
 const ACCS = ['#fa2d48', '#ff375f', '#ff9f0a', '#0a84ff', '#bf5af2', '#30d158'];
 const mqOrig = new WeakMap(); let rfDeb = 0;
@@ -993,62 +996,98 @@ function applySettings(rebuild) {
 const settingsItem = () => ({ label: ja ? '設定…' : 'Settings…', icon: 'sliders', act: openSettings });
 function applyExtra() {
   document.body.classList.toggle('bold', !!ST.bold);
-  document.body.classList.toggle('noprlx', !!ST.rp);
+  document.body.classList.toggle('noprlx', !!ST.rp); document.body.classList.toggle('noanim', !!ST.rm); P.auto = !!ST.auto;
   document.documentElement.style.setProperty('--rfto', ST.lg * 2);
   document.documentElement.style.setProperty('--fs', ST.fs || 1);
 }
 const effDark = () => ST.ap === 'dark' || (ST.ap === 'auto' && matchMedia('(prefers-color-scheme: dark)').matches);
-function openSettings() {
+const SECS = [
+  [['playback', 'play', '#fa2d48', ['再生', 'Playback']], ['sources', 'link', '#0a84ff', ['音楽サービス', 'Music Services']]],
+  [['appearance', 'circlehalf', '#3a3a3c', ['外観', 'Appearance']], ['glass', 'stack', '#30b0c7', ['Liquid Glass', 'Liquid Glass']], ['display', 'sun', '#0a84ff', ['画面表示と文字サイズ', 'Display & Text Size']], ['access', 'person2', '#0a84ff', ['アクセシビリティ', 'Accessibility']]],
+  [['library', 'note', '#ff9f0a', ['ライブラリ', 'Library']], ['about', 'info', '#8e8e93', ['情報', 'About']]],
+];
+function openSettings(start) {
   let el = $('#settings'); if (el) el.remove();
   el = document.createElement('div'); el.id = 'settings'; document.body.appendChild(el);
-  const st = []; // ページスタック
+  let sec = start || 'playback', q = '', det = false;
+  const L = a => a[ja ? 0 : 1];
   const tg = (k, on) => `<button class="tgl${on ? ' on' : ''}" data-tg="${k}" role="switch" aria-checked="${!!on}"><i></i></button>`;
-  const row = (l, right, go) => `<div class="srw"${go ? ` data-go="${go}"` : ''}><span>${l}</span><em>${right || ''}</em>${go ? `<b>${ic('chevr')}</b>` : ''}</div>`;
-  const pages = {
-    root: () => ({ title: ja ? '設定' : 'Settings', html:
-      `<div class="sgp">${row(ja ? '外観モード' : 'Appearance', ST.ap === 'auto' ? (ja ? '自動' : 'Auto') : effDark() ? (ja ? 'ダーク' : 'Dark') : (ja ? 'ライト' : 'Light'), 'ap')}</div>
-       <div class="sgp">${row('Liquid Glass', ST.lg < .34 ? (ja ? 'よりクリア' : 'Clearer') : ST.lg > .66 ? (ja ? '色合い調整' : 'Tinted') : (ja ? '標準' : 'Default'), 'lg')}</div><p class="sft">${ja ? 'Liquid Glass は、背後のコンテンツに合わせてダイナミックに変化します。' : 'Liquid Glass adapts dynamically to the content behind it.'}</p>
-       <div class="sgp">${row(ja ? 'テキストサイズを変更' : 'Text Size', '', 'fs')}<div class="srw"><span>${ja ? '文字を太くする' : 'Bold Text'}</span>${tg('bold', ST.bold)}</div></div>
-       <div class="sgp">${row(ja ? 'アクセントカラー' : 'Accent Color', `<u class="dot" style="background:${ST.acc}"></u>`, 'acc')}</div>
-       <div class="sgh">${ja ? 'アクセシビリティオプション' : 'Accessibility'}</div>
-       <div class="sgp"><div class="srw"><span>${ja ? '視差効果を減らす' : 'Reduce Parallax'}</span>${tg('rp', ST.rp)}</div></div>` }),
-    ap: () => ({ title: ja ? '外観モード' : 'Appearance', html:
-      `<div class="sgp apc"><div class="apr">${['light', 'dark'].map(k => { const on = ST.ap === 'auto' ? (effDark() === (k === 'dark')) : ST.ap === k;
-        return `<button data-ap="${k}" class="apo"><div class="pv ${k}"><span>9:41</span><i></i><i></i></div><div>${k === 'light' ? (ja ? 'ライト' : 'Light') : (ja ? 'ダーク' : 'Dark')}</div><div class="rd${on ? ' on' : ''}">${on ? ic('check') : ''}</div></button>`; }).join('')}</div>
-        <div class="srw"><span>${ja ? '自動' : 'Automatic'}</span>${tg('auto', ST.ap === 'auto')}</div></div>
-       <p class="sft">${ja ? '“自動” では、日の出または日の入に基づいてライトとダークが切り替わります。' : 'Automatic switches between Light and Dark based on sunrise and sunset.'}</p>` }),
-    lg: () => ({ title: 'Liquid Glass', html:
-      `<div class="lgpv"><div class="lgim"><div class="lgbar"><span class="glass lgc">${ic('list')}</span><span class="glass lgs">${ic('search')}<small>${ja ? '検索' : 'Search'}</small></span></div></div><div class="lgtx"><h3>${ja ? 'ようこそ Apple Park へ' : 'Welcome to Apple Park'}</h3><h4>${ja ? 'カリフォルニア州クパティーノ' : 'Cupertino, California'}</h4><p>${ja ? 'この場所ならではの自然の魅力や美しさを発見しましょう。' : 'Discover the natural beauty of this place.'}</p></div></div>
-       <div class="sgp lgsl"><span class="lgi">${ic('stack')}</span><input type="range" class="gs" data-k="lg" min="0" max="1" step="0.01" value="${ST.lg}"><span class="lgi f">${ic('stack')}</span></div>
-       <p class="sft">${ja ? '“クリア” を選択すると透明度が高くなり、“色合い調整” を選択すると不透明度が上がってコンテンツやコントロールのコントラストが強くなります。' : 'Clear is more transparent. Tinted is more opaque for stronger contrast.'}</p>
-       <div class="sgp lgsl2"><span>${ja ? '屈折の強さ' : 'Refraction'}</span><input type="range" class="gs" data-k="refr" min="0" max="2" step="0.05" value="${ST.refr}"></div>
-       <div class="sgp lgsl2"><span>${ja ? 'ぼかし' : 'Blur'}</span><input type="range" class="gs" data-k="blur" min="0" max="6" step="0.1" value="${ST.blur}"></div>` }),
-    fs: () => ({ title: ja ? 'テキストサイズ' : 'Text Size', html:
-      `<div class="sgp lgsl"><small style="font-size:14px">A</small><input type="range" class="gs" data-k="fs" min="0.85" max="1.3" step="0.05" value="${ST.fs || 1}"><small style="font-size:24px">A</small></div><p class="sft">${ja ? '画面全体の文字の大きさを調整します。' : 'Adjusts text size across the app.'}</p>` }),
-    acc: () => ({ title: ja ? 'アクセントカラー' : 'Accent Color', html:
-      `<div class="sgp swp">${ACCS.map(c => `<button data-acc="${c}" style="background:${c}" class="${ST.acc === c ? 'on' : ''}" aria-label="${c}"></button>`).join('')}</div>` }),
+  const row = (l, r, extra = '') => `<div class="srw" ${extra}><span>${l}</span><em>${r || ''}</em>${extra.includes('data-') ? `<b>${ic('chevr')}</b>` : ''}</div>`;
+  const trow = (l, k, on) => `<div class="srw"><span>${l}</span>${tg(k, on)}</div>`;
+  const grp = (h, body, f) => `${h ? `<div class="sgh">${h}</div>` : ''}<div class="sgp">${body}</div>${f ? `<p class="sft">${f}</p>` : ''}`;
+  const btn = (l, a, red) => `<div class="srw act${red ? ' red' : ''}" data-do="${a}"><span>${l}</span></div>`;
+  const ck = (l, a, on) => `<div class="srw act" data-do="${a}"><span>${l}</span>${on ? `<b class="ckm">${ic('check')}</b>` : ''}</div>`;
+  const RT = [.75, 1, 1.25, 1.5, 2];
+  const C = {
+    profile: () => grp('', `<div class="srw"><span>${ja ? '名前' : 'Name'}</span><input class="sin2" id="nmin" value="${esc(uname)}" placeholder="${t('name')}" maxlength="30"></div>`, ja ? 'ホームの「あなたのステーション」などに表示されます。' : 'Shown in your station name on Home.'),
+    playback: () => grp('', trow(ja ? '自動再生' : 'Autoplay', 'auto', ST.auto) + trow(ja ? '再生位置を記憶' : 'Remember Playback', 'resume', ST.resume), ja ? '自動再生をオンにすると、キューが終わったあと同じアーティストの曲が続けて再生されます。' : 'When the queue ends, similar songs keep playing.')
+      + grp(ja ? '再生速度' : 'Playback Speed', `<div class="seg2">${RT.map(r => `<button data-do="rate:${r}" class="${au.playbackRate === r ? 'on' : ''}">${r}×</button>`).join('')}</div>`)
+      + grp(ja ? 'スリープタイマー' : 'Sleep Timer', [15, 30, 45, 60].map(m => btn(m + (ja ? '分' : ' min'), 'sleep:' + m)).join('') + btn(ja ? 'この曲の終わりまで' : 'End of Track', 'sleep:end') + btn(ja ? 'オフ' : 'Off', 'sleep:0')),
+    sources: () => grp(ja ? '検索の既定ソース' : 'Default Search Source', [['audius', 'Audius', ja ? 'フル再生・無料' : 'Full tracks'], ['archive', 'Internet Archive', ja ? 'フル再生' : 'Full tracks'], ['commons', 'Wikimedia Commons', ja ? 'フル再生' : 'Full tracks'], ['jamendo', 'Jamendo', 'client_id'], ['itunes', 'iTunes', ja ? '30秒プレビュー' : '30s previews'], ['lib', t('library'), '']].map(([k, n, d]) => `<div class="srw act" data-do="src:${k}"><span>${n}${d ? `<small> ${d}</small>` : ''}</span>${S.src === k ? `<b class="ckm">${ic('check')}</b>` : ''}</div>`).join(''))
+      + grp('Jamendo', `<div class="srw act" data-do="jam"><span>client_id</span><em>${jamKey() ? (ja ? '設定済み' : 'Set') : (ja ? '未設定' : 'Not set')}</em><b>${ic('chevr')}</b></div>`, ja ? 'developer.jamendo.com で無料のclient_idを取得できます。' : 'Get a free client_id at developer.jamendo.com.'),
+    appearance: () => grp('', `<div class="apr">${['light', 'dark'].map(k => { const on = ST.ap === 'auto' ? (effDark() === (k === 'dark')) : ST.ap === k;
+        return `<button data-ap="${k}" class="apo"><div class="pv ${k}"><span>9:41</span><i></i><i></i></div><div>${k === 'light' ? (ja ? 'ライト' : 'Light') : (ja ? 'ダーク' : 'Dark')}</div><div class="rd${on ? ' on' : ''}">${on ? ic('check') : ''}</div></button>`; }).join('')}</div>${trow(ja ? '自動' : 'Automatic', 'auto2', ST.ap === 'auto')}`, ja ? '“自動” では、端末の設定に合わせてライトとダークが切り替わります。' : 'Automatic follows your device setting.')
+      + grp(ja ? 'アクセントカラー' : 'Accent Color', `<div class="swp">${ACCS.map(c => `<button data-acc="${c}" style="background:${c}" class="${ST.acc === c ? 'on' : ''}" aria-label="${c}"></button>`).join('')}</div>`),
+    glass: () => `<div class="lgpv"><div class="lgim"><div class="lgbar"><span class="glass lgc">${ic('list')}</span><span class="glass lgs">${ic('search')}<small>${ja ? '検索' : 'Search'}</small></span></div></div><div class="lgtx"><h3>${ja ? 'ようこそ Apple Park へ' : 'Welcome to Apple Park'}</h3><h4>${ja ? 'カリフォルニア州クパティーノ' : 'Cupertino, California'}</h4><p>${ja ? 'この場所ならではの自然の魅力や美しさを発見しましょう。' : 'Discover the natural beauty of this place.'}</p></div></div>`
+      + `<div class="sgp lgsl"><span class="lgi">${ic('stack')}</span><input type="range" class="gs" data-k="lg" min="0" max="1" step="0.01" value="${ST.lg}"><span class="lgi f">${ic('stack')}</span></div><p class="sft">${ja ? '“クリア” を選択すると透明度が高くなり、“色合い調整” を選択すると不透明度が上がってコンテンツやコントロールのコントラストが強くなります。' : 'Clear is more transparent. Tinted is more opaque for stronger contrast.'}</p>`
+      + grp(ja ? '屈折' : 'Refraction', trow(ja ? '背景の屈折効果' : 'Edge Refraction', 'glass', glassOn()) + `<div class="srw srs"><span>${ja ? '屈折の強さ' : 'Strength'}</span><input type="range" class="gs" data-k="refr" min="0" max="2" step="0.05" value="${ST.refr}"></div><div class="srw srs"><span>${ja ? 'ぼかし' : 'Blur'}</span><input type="range" class="gs" data-k="blur" min="0" max="6" step="0.1" value="${ST.blur}"></div>`),
+    display: () => grp(ja ? 'テキストサイズ' : 'Text Size', `<div class="srw srs"><small style="font-size:14px">A</small><input type="range" class="gs" data-k="fs" min="0.85" max="1.3" step="0.05" value="${ST.fs || 1}"><small style="font-size:24px">A</small></div>`, ja ? 'アプリ全体の文字の大きさを調整します。' : 'Adjusts text size across the app.') + grp('', trow(ja ? '文字を太くする' : 'Bold Text', 'bold', ST.bold)),
+    access: () => grp(ja ? '視覚' : 'Vision', trow(ja ? '視差効果を減らす' : 'Reduce Parallax', 'rp', ST.rp) + trow(ja ? 'モーションを減らす' : 'Reduce Motion', 'rm', ST.rm) + trow(ja ? '透明度を下げる(屈折オフ)' : 'Reduce Transparency', 'glassoff', !glassOn()), ja ? '“モーションを減らす” はアニメーションを最小限にします。' : 'Reduce Motion minimizes animations.'),
+    library: () => grp(ja ? 'ライブラリ' : 'Library', row(ja ? '曲' : 'Songs', String(allSongs().length)) + row(ja ? 'お気に入り' : 'Favorites', String(favs.size)) + row(ja ? 'プレイリスト' : 'Playlists', String(playlists.length)) + row(ja ? '再生履歴' : 'History', String(recent.length)))
+      + grp(ja ? 'データ' : 'Data', btn(ja ? '再生履歴を消去' : 'Clear Play History', 'clrrecent', 1) + btn(ja ? '再生回数をリセット' : 'Reset Play Counts', 'clrcnt', 1) + btn(ja ? '検索履歴を消去' : 'Clear Search History', 'clrhist', 1) + btn(ja ? 'キャッシュを消去' : 'Clear Cache', 'clrcache', 1)),
+    about: () => `<div class="sgp aboutc"><div class="aico">${ic('note')}</div><b>Music</b><small>iPadOS Music PWA · v17</small></div>` + grp('', row(ja ? '表示モード' : 'Display Mode', matchMedia('(display-mode: standalone)').matches ? 'PWA' : 'Browser') + row(ja ? '言語' : 'Language', ja ? '日本語' : 'English') + row(ja ? 'ガラス効果' : 'Glass', glassOn() ? (ja ? 'オン' : 'On') : (ja ? 'オフ' : 'Off'))) + `<p class="sft">${ja ? '音楽は Audius / Internet Archive / Wikimedia Commons / Jamendo / iTunes から取得します。' : 'Music comes from Audius, Internet Archive, Wikimedia Commons, Jamendo and iTunes.'}</p>`,
   };
-  const draw = (dir) => {
-    const cur = st[st.length - 1], p = pages[cur]();
-    el.innerHTML = `<div class="sbar"><button class="sback glass" data-sb="${st.length > 1 ? 'back' : 'close'}" aria-label="Back">${ic(st.length > 1 ? 'chevl' : 'xmark')}</button><h1>${p.title}</h1></div><div class="sbody ${dir || ''}">${p.html}</div>`;
-    $$('input.gs', el).forEach(r => paint(r));
+  const title = id => id === 'profile' ? (ja ? 'プロフィール' : 'Profile') : L(SECS.flat().find(s => s[0] === id)[3]);
+  const left = () => {
+    const ql = q.toLowerCase(), g = SECS.map(gr => gr.filter(s => !ql || L(s[3]).toLowerCase().includes(ql))).filter(gr => gr.length);
+    return `<button class="sprof${sec === 'profile' ? ' on' : ''}" data-sec="profile"><span class="avatar">${ic('person')}</span><span><b>${esc(uname || t('name'))}</b><small>${ja ? 'プロフィールを編集' : 'Edit profile'}</small></span></button>`
+      + g.map(gr => `<div class="slg">${gr.map(s => `<button class="sli${sec === s[0] ? ' on' : ''}" data-sec="${s[0]}"><span class="sico" style="background:${s[2]}">${ic(s[1])}</span><span>${L(s[3])}</span></button>`).join('')}</div>`).join('') || `<p class="sft">${ja ? '該当なし' : 'No results'}</p>`;
+  };
+  const draw = (keep) => {
+    const sc = keep ? $('.srb', el)?.scrollTop : 0;
+    el.className = (el.classList.contains('show') ? 'show ' : '') + (det ? 'det' : '');
+    el.innerHTML = `<div class="sw"><aside class="sl"><div class="slh"><label class="glass sfield">${ic('search')}<input id="sq" type="search" placeholder="${ja ? '検索' : 'Search'}" value="${esc(q)}" autocomplete="off"></label></div><div class="slb">${left()}</div></aside>
+      <section class="sr"><div class="sbar"><button class="sback glass" data-sb="back" aria-label="Back">${ic('chevl')}</button><h1>${title(sec)}</h1><button class="sx glass" data-sb="close" aria-label="Close">${ic('xmark')}</button></div><div class="srb sbody">${C[sec]()}</div></section></div>`;
+    $$('input.gs', el).forEach(paint);
+    if (keep && sc) $('.srb', el).scrollTop = sc;
+    if (q) { const i = $('#sq', el); i.focus(); i.setSelectionRange(q.length, q.length); }
   };
   const paint = r => { const mn = +r.min, mx = +r.max; r.style.setProperty('--p', ((+r.value - mn) / (mx - mn) * 100) + '%'); };
-  const go = (pg) => { st.push(pg); draw('in'); };
-  st.push('root'); draw('');
-  requestAnimationFrame(() => el.classList.add('show'));
+  draw(); requestAnimationFrame(() => el.classList.add('show'));
   const close = () => { el.classList.remove('show'); setTimeout(() => el.remove(), 380); };
-  el.oninput = e => { const r = e.target.closest('input.gs'); if (!r) return; ST[r.dataset.k] = +r.value; paint(r); LS.set('set', ST); applySettings(r.dataset.k === 'refr'); applyExtra(); };
-  el.onclick = e => {
-    const t = e.target;
-    const sb = t.closest('[data-sb]'); if (sb) { if (sb.dataset.sb === 'back') { st.pop(); draw('out'); } else close(); return; }
-    const g = t.closest('[data-go]'); if (g) { go(g.dataset.go); return; }
-    const ap = t.closest('[data-ap]'); if (ap) { ST.ap = ap.dataset.ap; }
-    const ac = t.closest('[data-acc]'); if (ac) { ST.acc = ac.dataset.acc; }
-    const tgl = t.closest('[data-tg]');
-    if (tgl) { const k = tgl.dataset.tg; if (k === 'auto') ST.ap = ST.ap === 'auto' ? (effDark() ? 'dark' : 'light') : 'auto'; else ST[k] = ST[k] ? 0 : 1; }
-    if (ap || ac || tgl) { LS.set('set', ST); applySettings(); applyExtra(); const sc = $('.sbody', el).scrollTop; draw(''); $('.sbody', el).scrollTop = sc; }
-  };
+  const save = () => { LS.set('set', ST); applySettings(); applyExtra(); };
+  el.addEventListener('input', e => {
+    const r = e.target.closest('input.gs');
+    if (r) { ST[r.dataset.k] = +r.value; paint(r); LS.set('set', ST); applySettings(r.dataset.k === 'refr'); applyExtra(); return; }
+    if (e.target.id === 'nmin') { uname = e.target.value; LS.set('name', uname); const b = $('.sprof b', el); if (b) b.textContent = uname || t('name'); renderSidebar(); return; }
+    if (e.target.id === 'sq') { q = e.target.value; $('.slb', el).innerHTML = left(); }
+  });
+  el.addEventListener('click', async e => {
+    const t0 = e.target;
+    const sb = t0.closest('[data-sb]'); if (sb) { if (sb.dataset.sb === 'back') { det = false; draw(); } else close(); return; }
+    const sc = t0.closest('[data-sec]'); if (sc) { sec = sc.dataset.sec; det = true; draw(); return; }
+    const ap = t0.closest('[data-ap]'); if (ap) { ST.ap = ap.dataset.ap; save(); draw(true); return; }
+    const ac = t0.closest('[data-acc]'); if (ac) { ST.acc = ac.dataset.acc; save(); draw(true); return; }
+    const tgl = t0.closest('[data-tg]');
+    if (tgl) {
+      const k = tgl.dataset.tg;
+      if (k === 'auto') { ST.auto = ST.auto ? 0 : 1; P.auto = !!ST.auto; }
+      else if (k === 'auto2') ST.ap = ST.ap === 'auto' ? (effDark() ? 'dark' : 'light') : 'auto';
+      else if (k === 'glass' || k === 'glassoff') glassItem().act();
+      else ST[k] = ST[k] ? 0 : 1;
+      save(); draw(true); return;
+    }
+    const d = t0.closest('[data-do]'); if (!d) return; const [a, v] = d.dataset.do.split(':');
+    if (a === 'rate') { const r = +v; au.defaultPlaybackRate = r; au.playbackRate = r; au.preservesPitch = true; }
+    else if (a === 'sleep') { if (v === 'end') { S.sleepEnd = true; toast(ja ? 'この曲の終わりで停止' : 'Stops at end of track'); } else setSleep(+v * 60); }
+    else if (a === 'src') { S.src = v; }
+    else if (a === 'jam') { const k = await ask('Jamendo client_id', 'client_id', jamKey()); if (k) LS.set('jamendo', k); }
+    else if (a === 'clrrecent') { recent = []; LS.set('recent', recent); toast(ja ? '消去しました' : 'Cleared'); }
+    else if (a === 'clrcnt') { cnt = {}; LS.set('cnt', cnt); toast(ja ? 'リセットしました' : 'Reset'); }
+    else if (a === 'clrhist') { shist = []; LS.set('shist', shist); toast(ja ? '消去しました' : 'Cleared'); }
+    else if (a === 'clrcache') { try { for (const k of await caches.keys()) await caches.delete(k); } catch {} toast(ja ? 'キャッシュを消去しました' : 'Cache cleared'); }
+    draw(true);
+  });
 }
 
 /* ============ 歌詞(LRCLIB) / 再生速度 / スリープタイマー ============ */
@@ -1172,7 +1211,7 @@ function rfInit() {
   await idb.init();
   (await idb.all()).forEach(x => lib.set(x.id, x));
   renderSidebar(); render(); ui();
-  try { restoreResume(); } catch {}
+  try { if (ST.resume) restoreResume(); } catch {}
   if ('serviceWorker' in navigator && location.protocol.startsWith('http')) navigator.serviceWorker.register('sw.js').catch(() => {});
   if (navigator.storage && navigator.storage.persist) navigator.storage.persist().catch(() => {});
 })();

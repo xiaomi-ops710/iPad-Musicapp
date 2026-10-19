@@ -529,3 +529,79 @@ body.phone .pt.lensing .ptsel{opacity:0!important}
 body.phone .pt{touch-action:none;-webkit-user-select:none;user-select:none;-webkit-touch-callout:none}
 body.phone .ptsel{background:rgba(120,120,128,.22)}
 body.phone #ptab{outline:0;border:0;background:none;box-shadow:none}
+
+/* ===== v17 ===== */
+.tgl{width:64px;height:38px}
+.tgl i{top:3px;left:3px;width:38px;height:32px;border-radius:16px;box-shadow:0 2px 6px rgba(0,0,0,.3),0 0 0 .5px rgba(0,0,0,.08)}
+.tgl.on i{transform:translateX(20px)}
+.tgl:active i{width:46px}.tgl.on:active i{transform:translateX(12px)}
+.rtiles{display:grid;grid-template-columns:repeat(3,1fr);gap:16px;margin-bottom:8px}
+.rtile{aspect-ratio:1;border-radius:26px;background:var(--bg);box-shadow:0 6px 22px rgba(0,0,0,.12),inset 0 0 0 .5px var(--sep);display:flex;flex-direction:column;align-items:center;justify-content:space-between;padding:18% 8% 10%;cursor:pointer;transition:transform .4s var(--spring)}
+@media(prefers-color-scheme:dark){.rtile{background:#1c1c1e}}
+.rtile:active{transform:scale(.94)}
+.rtile b{font-size:clamp(28px,6vw,54px);font-weight:900;letter-spacing:-.04em;line-height:1;margin:auto 0;text-align:center}
+.rtile .rt-country{font-size:clamp(16px,3.4vw,30px);-webkit-text-stroke:1px #1d3dff}.rtile .rt-club{font-style:italic;font-weight:800;font-size:clamp(30px,6.4vw,58px)}
+.rtile .rt-one{font-size:clamp(50px,11vw,100px)}.rtile .rt-uno{font-size:clamp(18px,4vw,34px)}
+.rtile small{display:flex;align-items:center;gap:5px;font-size:12px;font-weight:600;color:var(--fg2)}
+.rlive{flex:none;width:min(80vw,420px);height:230px;border-radius:26px;color:#fff;padding:20px;display:flex;flex-direction:column;justify-content:flex-end;cursor:pointer;transition:transform .4s var(--spring)}
+.rlive:active{transform:scale(.97)}
+.rlive small{color:rgba(255,255,255,.75);font-weight:600;font-size:13px;letter-spacing:.06em}
+.rlive b{font-size:26px}.rlive p{margin:4px 0 0;opacity:.85;font-size:15px}
+.pick.replay{background:linear-gradient(160deg,#6a3cff 0%,#ff2d8a 45%,#ff8a00 100%);justify-content:flex-start}
+.pick.replay i{font-style:normal;font-weight:800;font-size:22px;opacity:.95}
+.pick.replay strong{font-size:44px;line-height:1;font-weight:800;margin-top:auto;letter-spacing:-.02em}
+.pick.replay small{color:rgba(255,255,255,.85);margin-top:8px;font-size:12px}
+
+/* ===== v18: iPad設定アプリ風(左:項目 / 右:詳細) ===== */
+#modal{z-index:140}#menu{z-index:145}#toast{z-index:150}
+body.noanim *{animation-duration:.01ms!important;transition-duration:.01ms!important}
+.ios-spin{width:34px;height:34px;fill:var(--fg2);animation:ios8 .9s steps(8) infinite;margin:40px auto;display:block}
+@keyframes ios8{to{transform:rotate(360deg)}}
+#settings{flex-direction:row}
+#settings .sw{display:flex;flex:1;min-width:0;height:100%}
+#settings .sl{flex:none;width:min(36vw,380px);display:flex;flex-direction:column;border-right:.5px solid var(--sep);background:var(--sbg)}
+#settings .slh{padding:calc(14px + var(--sat)) 14px 10px}
+.sfield{display:flex;align-items:center;gap:10px;height:46px;border-radius:99px;padding:0 16px;color:var(--fg2);font-size:17px}
+.sfield input{flex:1;min-width:0;background:transparent;border:0;outline:0;font-size:17px;color:var(--fg)}
+#settings .slb{flex:1;overflow:auto;padding:4px 14px 40px}
+.sprof{display:flex;align-items:center;gap:14px;width:100%;text-align:left;padding:12px 14px;border-radius:26px;background:var(--scard);margin-bottom:22px}
+.sprof .avatar{width:54px;height:54px;border-radius:50%;background:linear-gradient(#c7c7cc,#8e8e93);color:#fff;display:grid;place-items:center;font-size:28px;flex:none}
+.sprof b{display:block;font-size:19px}.sprof small{font-size:14px}
+.sprof.on{box-shadow:inset 0 0 0 2px var(--acc)}
+.slg{margin-bottom:22px}
+.sli{display:flex;align-items:center;gap:14px;width:100%;height:56px;padding:0 14px;border-radius:99px;font-size:18px;text-align:left;transition:background .25s}
+.sli.on{background:rgba(120,120,128,.24)}
+.sico{width:36px;height:36px;border-radius:10px;display:grid;place-items:center;color:#fff;font-size:21px;flex:none;box-shadow:inset 0 0 0 .5px rgba(255,255,255,.18)}
+#settings .sr{flex:1;min-width:0;display:flex;flex-direction:column}
+#settings .sr .sbar{height:calc(70px + var(--sat))}
+#settings .sback{display:none}
+.sx{position:absolute;right:20px;top:calc(var(--sat) + 11px);width:48px;height:48px;border-radius:50%;display:grid;place-items:center;font-size:20px;transition:transform .4s var(--spring)}
+.sx:active{transform:scale(.88)}
+#settings .srb{flex:1;overflow:auto;padding:10px max(28px,calc((100% - 780px)/2)) 70px}
+.sgh{margin-top:30px}.srb>.sgp:first-child,.srb>.sgh:first-child{margin-top:0}
+.srb>.sgp+.sgp,.srb>.sft+.sgp{margin-top:30px}
+.srb>.sft+.sgh{margin-top:30px}
+.srw.act{cursor:pointer}.srw.act:active{opacity:.55}.srw.red span{color:#ff453a}
+.srw span small{color:var(--fg2);font-size:14px}
+.srw.srs{gap:14px;min-height:62px}.srw.srs>span{width:100px;flex:none;font-size:16px}
+.srw.srs input.gs{flex:1}
+.ckm{color:var(--acc);font-size:20px}
+.sin2{flex:1;text-align:right;background:transparent;border:0;outline:0;font-size:18px;color:var(--fg);min-width:0}
+.sgp .seg2{margin:12px 0}
+.sgp .seg2{display:flex;background:rgba(120,120,128,.18);border-radius:14px;padding:3px}
+.sgp .seg2 button{flex:1;height:38px;border-radius:11px;font-weight:600;font-size:16px;transition:background .3s,box-shadow .3s}
+.sgp .seg2 button.on{background:var(--bg);box-shadow:0 1px 5px rgba(0,0,0,.25)}
+.apc,.sgp .apr{padding-top:22px}
+.aboutc{display:flex;flex-direction:column;align-items:center;padding:28px 20px;gap:4px}
+.aboutc b{font-size:22px}.aico{width:84px;height:84px;border-radius:20px;display:grid;place-items:center;background:linear-gradient(#ff5e7a,#fa2d48);color:#fff;font-size:46px;margin-bottom:8px}
+@media(max-width:760px){
+  #settings .sl{width:100%;border:0}
+  #settings .sr{position:absolute;inset:0;background:var(--sbg);transform:translateX(100%);transition:transform .5s var(--ease)}
+  #settings.det .sr{transform:none}
+  #settings .sback{display:grid}
+  #settings .srb{padding:10px 16px 70px}
+  .sx{display:none}
+  .sbar h1{font-size:18px}
+}
+.srw b.ckm{color:var(--acc);font-size:22px;opacity:1}
+.srw.srs{flex-wrap:nowrap;min-height:64px}.srw.srs input.gs{width:auto;flex:1;min-width:0}.srw.srs>span{flex:none}
