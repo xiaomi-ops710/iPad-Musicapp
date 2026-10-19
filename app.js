@@ -455,6 +455,22 @@ function openTrackMenu(el, x, y) {
   const k = el.dataset.l, i = +el.dataset.i; const list = S.lists[k]; if (!list) return;
   trackMenu(list[i], x, y, list);
 }
+async function saveOffline(r) {
+  toast(ja ? '保存中…' : 'Saving…', 20000);
+  try {
+    const res = await fetch(audioUrl(r)); if (!res.ok) throw 0;
+    const blob = await res.blob(); if (!blob.size) throw 0;
+    const o = { ...r, blob, dl: 1, added: r.added || Date.now() }; delete o.url;
+    if (typeof r.art === 'string' && r.art.startsWith('http')) { try { const ar = await fetch(r.art); if (ar.ok) o.art = await ar.blob(); } catch {} }
+    lib.set(o.id, o); await idb.put(o); toast(ja ? 'オフライン用に保存しました' : 'Saved for offline'); render();
+  } catch { toast(ja ? 'この曲は保存できません(配信元が許可していません)' : 'This track cannot be saved (blocked by source)', 3500); }
+}
+function songInfo(r) {
+  const m = $('#modal'), f = (l, v) => v ? `<div class="srw"><span>${l}</span><em>${esc(String(v))}</em></div>` : '';
+  const SRC = { itunes: 'iTunes (30s)', audius: 'Audius', upload: ja ? '端末' : 'This device', archive: 'Internet Archive', commons: 'Wikimedia Commons', jamendo: 'Jamendo', url: 'URL' };
+  m.innerHTML = `<div class="dlg glass info"><div class="ihead">${cov(r, 'sm')}<div><b>${esc(r.title)}</b><small>${esc(r.artist)}</small></div></div><div class="sgp">${f(ja ? 'アルバム' : 'Album', r.album)}${f(ja ? '長さ' : 'Duration', r.dur ? fmt(r.dur) : '')}${f(ja ? '配信元' : 'Source', SRC[r.src] || r.src)}${f(ja ? '再生回数' : 'Plays', cnt[r.id] || 0)}${f(ja ? '保存' : 'Storage', r.blob ? (ja ? 'この端末(' + (r.blob.size / 1048576).toFixed(1) + ' MB)' : 'On device (' + (r.blob.size / 1048576).toFixed(1) + ' MB)') : (ja ? 'ストリーミング' : 'Streaming'))}${f(ja ? '形式' : 'Format', r.blob ? r.blob.type : '')}</div><div class="btns"><button data-v="1" class="pri">${t('done')}</button></div></div>`;
+  m.classList.add('show'); m.onclick = e => { if (e.target === m || e.target.closest('button')) m.classList.remove('show'); };
+}
 function trackMenu(tr, x, y, list, fromPlayer) {
   const r = resolve(tr), inl = lib.has(r.id), isFav = favs.has(r.id);
   const items = [
@@ -467,6 +483,9 @@ function trackMenu(tr, x, y, list, fromPlayer) {
   items.push('-', { label: ja ? 'アーティストに移動' : 'Go to Artist', icon: 'person2', act: () => { if (fromPlayer) closeNP(); go('iartist:' + r.artist); } });
   if (r.cid) items.push({ label: ja ? 'アルバムに移動' : 'Go to Album', icon: 'stack', act: () => { if (fromPlayer) closeNP(); go('ialbum:' + r.cid); } });
   items.push({ label: ja ? '共有…' : 'Share…', icon: 'share', act: () => doShare(r.title, r.title + ' - ' + r.artist, shareUrl(r)) });
+  items.push({ label: ja ? '情報を見る' : 'Get Info', icon: 'infoc', act: () => songInfo(r) });
+  if (!r.blob) items.push({ label: ja ? 'オフライン用に保存' : 'Save for Offline', icon: 'download', act: () => saveOffline(r) });
+  else if (r.dl) items.push({ label: ja ? 'オフライン保存済み' : 'Saved Offline', icon: 'check', act: () => {} });
   if (!inl) items.push({ label: t('addLib'), icon: 'plus', act: () => addToLib(r) });
   else items.push({ label: t('rmLib'), icon: 'trash', danger: true, act: async () => { await removeFromLib(r.id); render(); } });
   const m = /^pl:(.+)$/.exec(S.route);
@@ -1034,7 +1053,8 @@ function openSettings(start) {
     display: () => grp(ja ? 'テキストサイズ' : 'Text Size', `<div class="srw srs"><small style="font-size:14px">A</small><input type="range" class="gs" data-k="fs" min="0.85" max="1.3" step="0.05" value="${ST.fs || 1}"><small style="font-size:24px">A</small></div>`, ja ? 'アプリ全体の文字の大きさを調整します。' : 'Adjusts text size across the app.') + grp('', trow(ja ? '文字を太くする' : 'Bold Text', 'bold', ST.bold)),
     access: () => grp(ja ? '視覚' : 'Vision', trow(ja ? '視差効果を減らす' : 'Reduce Parallax', 'rp', ST.rp) + trow(ja ? 'モーションを減らす' : 'Reduce Motion', 'rm', ST.rm) + trow(ja ? '透明度を下げる(屈折オフ)' : 'Reduce Transparency', 'glassoff', !glassOn()), ja ? '“モーションを減らす” はアニメーションを最小限にします。' : 'Reduce Motion minimizes animations.'),
     library: () => grp(ja ? 'ライブラリ' : 'Library', row(ja ? '曲' : 'Songs', String(allSongs().length)) + row(ja ? 'お気に入り' : 'Favorites', String(favs.size)) + row(ja ? 'プレイリスト' : 'Playlists', String(playlists.length)) + row(ja ? '再生履歴' : 'History', String(recent.length)))
-      + grp(ja ? 'データ' : 'Data', btn(ja ? '再生履歴を消去' : 'Clear Play History', 'clrrecent', 1) + btn(ja ? '再生回数をリセット' : 'Reset Play Counts', 'clrcnt', 1) + btn(ja ? '検索履歴を消去' : 'Clear Search History', 'clrhist', 1) + btn(ja ? 'キャッシュを消去' : 'Clear Cache', 'clrcache', 1)),
+      + grp(ja ? 'データ' : 'Data', btn(ja ? '再生履歴を消去' : 'Clear Play History', 'clrrecent', 1) + btn(ja ? '再生回数をリセット' : 'Reset Play Counts', 'clrcnt', 1) + btn(ja ? '検索履歴を消去' : 'Clear Search History', 'clrhist', 1) + btn(ja ? 'キャッシュを消去' : 'Clear Cache', 'clrcache', 1))
+      + grp(ja ? 'バックアップ' : 'Backup', btn(ja ? 'プレイリストと設定を書き出す' : 'Export Playlists & Settings', 'bkexp') + btn(ja ? 'バックアップを読み込む' : 'Import Backup', 'bkimp'), ja ? '曲のファイル本体は含まれません。プレイリスト、お気に入り、履歴、設定が対象です。' : 'Audio files are not included.'),
     about: () => `<div class="sgp aboutc"><div class="aico">${ic('note')}</div><b>Music</b><small>iPadOS Music PWA · v17</small></div>` + grp('', row(ja ? '表示モード' : 'Display Mode', matchMedia('(display-mode: standalone)').matches ? 'PWA' : 'Browser') + row(ja ? '言語' : 'Language', ja ? '日本語' : 'English') + row(ja ? 'ガラス効果' : 'Glass', glassOn() ? (ja ? 'オン' : 'On') : (ja ? 'オフ' : 'Off'))) + `<p class="sft">${ja ? '音楽は Audius / Internet Archive / Wikimedia Commons / Jamendo / iTunes から取得します。' : 'Music comes from Audius, Internet Archive, Wikimedia Commons, Jamendo and iTunes.'}</p>`,
   };
   const title = id => id === 'profile' ? (ja ? 'プロフィール' : 'Profile') : L(SECS.flat().find(s => s[0] === id)[3]);
@@ -1085,6 +1105,16 @@ function openSettings(start) {
     else if (a === 'clrrecent') { recent = []; LS.set('recent', recent); toast(ja ? '消去しました' : 'Cleared'); }
     else if (a === 'clrcnt') { cnt = {}; LS.set('cnt', cnt); toast(ja ? 'リセットしました' : 'Reset'); }
     else if (a === 'clrhist') { shist = []; LS.set('shist', shist); toast(ja ? '消去しました' : 'Cleared'); }
+    else if (a === 'bkexp') {
+      const data = { v: 1, pl: playlists, fav: [...favs], recent, cnt, pins, name: uname, set: ST, songs: [...lib.values()].filter(x => !x.blob).map(slim) };
+      const u = URL.createObjectURL(new Blob([JSON.stringify(data)], { type: 'application/json' })), l = document.createElement('a');
+      l.href = u; l.download = 'music-backup.json'; document.body.appendChild(l); l.click(); l.remove(); setTimeout(() => URL.revokeObjectURL(u), 4000);
+    }
+    else if (a === 'bkimp') {
+      const inp = document.createElement('input'); inp.type = 'file'; inp.accept = 'application/json,.json';
+      inp.onchange = async () => { try { const j = JSON.parse(await inp.files[0].text()); if (j.pl) playlists = j.pl; if (j.fav) favs = new Set(j.fav); if (j.recent) recent = j.recent; if (j.cnt) cnt = j.cnt; if (j.pins) pins = j.pins; if (j.name != null) { uname = j.name; LS.set('name', uname); } if (j.set) { Object.assign(ST, j.set); LS.set('set', ST); applySettings(); applyExtra(); } for (const s of j.songs || []) if (s.id && !lib.has(s.id)) { s.added = s.added || Date.now(); lib.set(s.id, s); await idb.put(s); } saveAll(); LS.set('cnt', cnt); renderSidebar(); render(); toast(ja ? '読み込みました' : 'Imported'); } catch { toast(t('err')); } };
+      inp.click();
+    }
     else if (a === 'clrcache') { try { for (const k of await caches.keys()) await caches.delete(k); } catch {} toast(ja ? 'キャッシュを消去しました' : 'Cache cleared'); }
     draw(true);
   });
@@ -1160,7 +1190,7 @@ function rfFilter(r) {
 function rfSizes() {
   RF.forEach(r => {
     const w = r.el.offsetWidth, h = r.el.offsetHeight; if (!w || !h || (w === r.w && h === r.h)) return;
-    r.w = w; r.h = h; r.B = Math.min(h * .4, 24); r.k = 1.6 * ST.refr; try { const nid = rfFilter(r); r.rfm.style.filter = r.rfm.style.webkitFilter = `url(#${nid})`; if (r.cur) { const o = document.getElementById(r.cur); if (o) o.remove(); } r.cur = nid; } catch {}
+    r.w = w; r.h = h; r.B = Math.min(h * .4, 24); r.rfm.style.setProperty('--rfw', Math.max(8, Math.round(r.B * .5)) + 'px'); r.k = 1.6 * ST.refr; try { const nid = rfFilter(r); r.rfm.style.filter = r.rfm.style.webkitFilter = `url(#${nid})`; if (r.cur) { const o = document.getElementById(r.cur); if (o) o.remove(); } r.cur = nid; } catch {}
   });
 }
 function rfClone() {

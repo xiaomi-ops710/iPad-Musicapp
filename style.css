@@ -613,3 +613,21 @@ body.noanim *{animation-duration:.01ms!important;transition-duration:.01ms!impor
 @media(prefers-color-scheme:dark){.sico{background:linear-gradient(160deg,#2e2e31,#151517);box-shadow:inset 0 0 0 .5px rgba(255,255,255,.14),inset 0 1px 0 rgba(255,255,255,.1),0 1px 3px rgba(0,0,0,.5)}}
 .sico .ic{filter:drop-shadow(0 0 4px color-mix(in srgb,var(--g) 40%,transparent))}
 .sli{height:60px}
+
+.dlg.info{width:min(440px,92vw);text-align:left}
+.ihead{display:flex;align-items:center;gap:14px;margin-bottom:14px}.ihead .cov{width:64px}.ihead b{display:block;font-size:18px}
+.dlg.info .sgp{background:rgba(120,120,128,.14);margin-bottom:14px}.dlg.info .srw{min-height:46px;font-size:16px}
+
+/* ===== v21: 中央はすりガラス(本物のbackdrop-filter)、縁だけ屈折 ===== */
+.rf{background:var(--gl)!important;-webkit-backdrop-filter:blur(26px) saturate(190%) brightness(1.04)!important;backdrop-filter:blur(26px) saturate(190%) brightness(1.04)!important}
+.glass>.rfm{background:transparent;padding:var(--rfw,12px);box-sizing:border-box;
+  -webkit-mask:linear-gradient(#000 0 0) content-box,linear-gradient(#000 0 0);-webkit-mask-composite:xor;
+  mask:linear-gradient(#000 0 0) content-box exclude,linear-gradient(#000 0 0);mask-composite:exclude}
+.rfm::after{display:none}
+.rfc{-webkit-filter:saturate(1.6) brightness(1.06) blur(1.6px);filter:saturate(1.6) brightness(1.06) blur(1.6px)}
+.rf::before{opacity:.5}
+body.phone .rf{background:color-mix(in srgb,var(--bg) 42%,transparent)!important}
+.rfc{-webkit-filter:saturate(1.15) brightness(.97) blur(1.4px);filter:saturate(1.15) brightness(.97) blur(1.4px)}
+.glass>.rfm{opacity:.85}
+.rf{-webkit-backdrop-filter:blur(30px) saturate(170%)!important;backdrop-filter:blur(30px) saturate(170%)!important}
+body.phone .rf{background:color-mix(in srgb,var(--bg) 58%,transparent)!important}
