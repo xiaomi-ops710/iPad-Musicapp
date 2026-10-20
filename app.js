@@ -296,16 +296,23 @@ const YT = { on: false, p: null, ready: false, pending: null, st: -1, t: 0, d: 0
 const ytEv = n => au.dispatchEvent(new Event(n));
 function ytEnsure() {
   if (YT.p || YT.loading) return; YT.loading = true;
-  let box = $('#ytp'); if (!box) { box = document.createElement('div'); box.id = 'ytp'; box.innerHTML = '<div id="ytpl"></div>'; document.body.prepend(box); }
-  const make = () => { YT.p = new window.YT.Player('ytpl', { width: 220, height: 220, playerVars: { playsinline: 1, controls: 0, disablekb: 1, fs: 0, rel: 0, modestbranding: 1, origin: location.protocol.startsWith('http') ? location.origin : undefined }, events: {
+  let box = $('#ytp'); if (!box) { box = document.createElement('div'); box.id = 'ytp'; box.innerHTML = `<div class="ytbar"><span id="ytmsg"></span><button id="ytx" aria-label="Close">${ic('xmark')}</button></div><div class="ytf"><div id="ytpl"></div></div>`; document.body.appendChild(box); $('#ytx').onclick = () => { YT.manual = 1; ytReveal(false); }; }
+  const make = () => { YT.p = new window.YT.Player('ytpl', { width: '100%', height: '100%', playerVars: { playsinline: 1, controls: 1, fs: 0, rel: 0, modestbranding: 1, origin: location.protocol.startsWith('http') ? location.origin : undefined }, events: {
     onReady: () => { YT.ready = true; if (YT.pending) { const id = YT.pending; YT.pending = null; YT.p.loadVideoById(id); } },
     onStateChange: e => ytState(e.data),
-    onError: e => { const c = cur(); if (c && c.src === 'youtube') { c._noembed = 1; toast(ja ? '埋め込み再生できないため別の方法で再生します' : 'Embedding blocked; trying another way', 3000); ytOff(); load(); } } } }); };
+    onAutoplayBlocked: () => ytReveal(true, ja ? '▶ をタップして再生を開始してください' : 'Tap ▶ to start playback'),
+    onError: e => { const c = cur(); if (c && c.src === 'youtube') { c._noembed = 1; toast((ja ? '埋め込み再生できません(エラー ' : 'Embedding blocked (error ') + e.data + (ja ? ')。別の方法で再生します' : '). Trying another way'), 3500); ytOff(); load(); } } } }); };
   if (window.YT && window.YT.Player) make();
   else { window.onYouTubeIframeAPIReady = make; const s = document.createElement('script'); s.src = 'https://www.youtube.com/iframe_api'; s.onerror = () => { YT.loading = false; toast(ja ? 'YouTubeプレイヤーを読み込めませんでした' : 'Could not load the YouTube player', 3000); }; document.head.appendChild(s); }
 }
+function ytReveal(on, msg) {
+  const box = $('#ytp'); if (!box) return; box.classList.toggle('show', !!on);
+  if (on && msg) $('#ytmsg').textContent = msg;
+  YT.shown = !!on;
+}
 function ytState(s) {
   const was = YT.st; YT.st = s;
+  if (s === -1 || s === 5) { setTimeout(() => { if (YT.on && (YT.st === -1 || YT.st === 5) && !YT.manual) ytReveal(true, ja ? '▶ をタップして再生を開始してください' : 'Tap ▶ to start playback'); }, 1500); }
   if (s === 1 && was !== 1) { ytEv('loadedmetadata'); ytEv('play'); }
   else if (s === 2 && was !== 2) ytEv('pause');
   else if (s === 0) { ytEv('pause'); ytEv('ended'); }
@@ -321,20 +328,23 @@ function ytOn() {
   d('play', { value: () => { try { YT.p && YT.p.playVideo(); } catch {} return Promise.resolve(); } });
   d('pause', { value: () => { try { YT.p && YT.p.pauseVideo(); } catch {} } });
   clearInterval(YT.iv);
-  YT.iv = setInterval(() => { if (!YT.ready || !YT.p) return; try { YT.t = YT.p.getCurrentTime() || 0; const dd = YT.p.getDuration() || 0; if (dd && dd !== YT.d) { YT.d = dd; ytEv('loadedmetadata'); } if (YT.st === 1) ytEv('timeupdate'); } catch {} }, 250);
+  YT.iv = setInterval(() => { if (!YT.ready || !YT.p) return; try { YT.t = YT.p.getCurrentTime() || 0; const dd = YT.p.getDuration() || 0; if (dd && dd !== YT.d) { YT.d = dd; ytEv('loadedmetadata'); } if (YT.st === 1) ytEv('timeupdate');
+    const c = cur(), vd = YT.p.getVideoData && YT.p.getVideoData(), ad = !!(c && vd && vd.video_id && c.yt && vd.video_id !== c.yt);
+    if (ad && !YT.manual) ytReveal(true, ja ? '広告が再生中です(終わるまでお待ちください)' : 'An ad is playing. Please wait or skip it.');
+    else if (!ad && YT.shown && YT.st === 1 && !YT.manual) { YT.okN = (YT.okN || 0) + 1; if (YT.okN > 6) { ytReveal(false); YT.okN = 0; } } } catch {} }, 250);
 }
 function ytOff() {
   if (!YT.on) return; YT.on = false; clearInterval(YT.iv);
   try { YT.p && YT.p.stopVideo(); } catch {}
   ['paused', 'currentTime', 'duration', 'playbackRate', 'volume', 'play', 'pause'].forEach(k => { try { delete au[k]; } catch {} });
-  YT.st = -1; YT.t = 0; YT.d = 0;
+  YT.st = -1; YT.t = 0; YT.d = 0; ytReveal(false);
 }
 function ytPlay(tr) {
-  ytOn(); YT.t = 0; YT.d = tr.dur || 0; YT.st = -1; ytEnsure();
+  ytOn(); YT.t = 0; YT.d = tr.dur || 0; YT.st = -1; YT.manual = 0; YT.okN = 0; ytEnsure();
   if (YT.ready) { YT.p.loadVideoById(tr.yt); try { YT.p.setPlaybackRate(YT.rate); } catch {} }
   else YT.pending = tr.yt;
   ytEv('timeupdate');
-  setTimeout(() => { if (cur() === tr && YT.on && YT.st !== 1 && YT.st !== 3) toast(ja ? '再生ボタンを押してください' : 'Tap play to start', 2500); }, 3500);
+  setTimeout(() => { if (cur() === tr && YT.on && YT.st !== 1 && YT.st !== 3 && !YT.manual) ytReveal(true, ja ? '▶ をタップして再生を開始してください' : 'Tap ▶ to start playback'); }, 2500);
 }
 function sess(tr) {
   if (!('mediaSession' in navigator)) return;
