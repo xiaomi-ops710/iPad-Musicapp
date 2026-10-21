@@ -816,3 +816,35 @@ body.phone .nppanel .tl .tr{padding:6px 0}
 
 body.phone #np.mode-lyrics .nptitle .ib,body.phone #np.mode-queue .nptitle .ib{overflow:visible;box-shadow:none}
 body.phone #np.mode-lyrics .nptitle .ib::before,body.phone #np.mode-queue .nptitle .ib::before{display:none}
+/* v33: タブバーの選択楕円を黒から半透明グレーへ */
+.tbpill,.lensc .tbpill{background:rgba(120,120,128,.32)!important}
+@media(prefers-color-scheme:light){.tbpill,.lensc .tbpill{background:rgba(120,120,128,.2)!important}}
+
+/* ===== v34: 設定の閉じるボタン(スマホ)・アニメーション強化 ===== */
+.sx2{display:none;width:46px;height:46px;border-radius:50%;place-items:center;font-size:20px;flex:none}
+#settings .slh{display:flex;gap:10px;align-items:center}
+#settings .slh .sfield{flex:1;min-width:0}
+@media(max-width:760px){.sx2{display:grid}}
+@keyframes pop{0%{opacity:0;transform:translateY(18px) scale(.94)}100%{opacity:1;transform:none}}
+@keyframes fadeup{0%{opacity:0;transform:translateY(10px)}100%{opacity:1;transform:none}}
+@keyframes slidein{0%{opacity:0;transform:translateX(26px)}100%{opacity:1;transform:none}}
+.hs>*{animation:pop .65s var(--spring) both}
+.hs>*:nth-child(2){animation-delay:.05s}.hs>*:nth-child(3){animation-delay:.1s}.hs>*:nth-child(4){animation-delay:.15s}.hs>*:nth-child(5){animation-delay:.2s}.hs>*:nth-child(n+6){animation-delay:.25s}
+.tl>.tr{animation:fadeup .45s var(--ease) both}
+.tl>.tr:nth-child(2){animation-delay:.03s}.tl>.tr:nth-child(3){animation-delay:.06s}.tl>.tr:nth-child(4){animation-delay:.09s}.tl>.tr:nth-child(5){animation-delay:.12s}.tl>.tr:nth-child(6){animation-delay:.15s}.tl>.tr:nth-child(n+7){animation-delay:.18s}
+.hs>*,.tl .tr{transition:transform .35s var(--spring),background .2s}
+.hs>*:active{transform:scale(.95)}.tl .tr:active{transform:scale(.98)}
+#menu.show button,#menu.show .mrow{animation:fadeup .4s var(--spring) both}
+#menu.show>*:nth-child(2){animation-delay:.03s}#menu.show>*:nth-child(3){animation-delay:.06s}#menu.show>*:nth-child(4){animation-delay:.09s}#menu.show>*:nth-child(5){animation-delay:.12s}#menu.show>*:nth-child(n+6){animation-delay:.15s}
+#np.open .nptitle,#np.open .times,#np.open .npbtns,#np.open .vol,#np.open .npfoot{animation:fadeup .6s var(--spring) both}
+#np.open .times{animation-delay:.05s}#np.open .npbtns{animation-delay:.1s}#np.open .vol{animation-delay:.15s}#np.open .npfoot{animation-delay:.2s}
+.npbtns .ib,.npfoot button,.npmodes button{transition:transform .35s var(--spring),background .3s,color .3s,opacity .3s}
+.npbtns .ib:active{transform:scale(.82)}
+.ib:active{transform:scale(.88)}
+.srb>*{animation:fadeup .45s var(--ease) both}
+#settings.det .srb{animation:slidein .5s var(--ease) both}
+body.phone .pt button.on .ic{animation:tabpop .55s var(--spring)}
+@keyframes tabpop{0%{transform:scale(.7)}60%{transform:scale(1.18)}100%{transform:scale(1)}}
+#mini{animation:pop .6s var(--spring) both}
+.lyl{transition:opacity .5s,filter .5s,transform .6s var(--spring)}
+@media(prefers-reduced-motion:reduce){*{animation:none!important}}

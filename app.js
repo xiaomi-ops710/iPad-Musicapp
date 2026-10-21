@@ -52,7 +52,7 @@ const shuf = a => { a = a.slice(); for (let i = a.length - 1; i > 0; i--) { cons
 const sleep = ms => new Promise(r => setTimeout(r, ms));
 
 /* ============ 状態 ============ */
-const S = { mode: LS.get('mode', 'sidebar'), tab: 'home', route: 'home', stack: [], lists: {}, src: 'audius', q: '', sb: innerWidth > 1000, col: LS.get('col', {}), edit: false, tok: 0, lk: 0 };
+const S = { mode: LS.get('mode', 'sidebar'), tab: 'home', route: 'home', stack: [], lists: {}, src: LS.get('src', 'youtube'), q: '', sb: innerWidth > 1000, col: LS.get('col', {}), edit: false, tok: 0, lk: 0 };
 let playlists = LS.get('pl', []);
 let favs = new Set(LS.get('fav', []));
 let recent = LS.get('recent', []);
@@ -276,7 +276,7 @@ function load() {
   cnt[tr.id] = (cnt[tr.id] || 0) + 1; LS.set('cnt', cnt);
   sess(tr); ui();
 }
-function toggle() { if (!cur()) return; au.paused ? au.play().catch(() => {}) : au.pause(); }
+function toggle() { if (!cur()) return; au.paused ? au.play().catch(() => {}) : (au._userPaused = true, au.pause()); }
 function next(auto) {
   if (!P.q.length) return;
   if (auto && P.repeat === 2) { au.currentTime = 0; au.play(); return; }
@@ -291,8 +291,14 @@ function prev() {
   if (au.currentTime > 3 || (!P.hist.length && P.i <= 0)) { au.currentTime = 0; return; }
   P.i = P.hist.length ? P.hist.pop() : P.i - 1; load();
 }
-au.addEventListener('play', () => { document.body.classList.add('playing'); ui(); });
-au.addEventListener('pause', () => { document.body.classList.remove('playing'); ui(); });
+let wantPlay = false;
+const msState = s => { try { navigator.mediaSession.playbackState = s; } catch {} };
+au.addEventListener('play', () => { wantPlay = true; au._userPaused = false; msState('playing'); document.body.classList.add('playing'); ui(); });
+au.addEventListener('pause', () => { msState('paused'); document.body.classList.remove('playing'); ui(); });
+au.addEventListener('timeupdate', () => { try { if (isFinite(au.duration) && navigator.mediaSession.setPositionState) navigator.mediaSession.setPositionState({ duration: au.duration, playbackRate: au.playbackRate || 1, position: Math.min(au.currentTime, au.duration) }); } catch {} });
+/* バックグラウンド: 画面を離れた/ロックで止まった場合は復帰時に再開 */
+document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible' && wantPlay && au.paused && au.src && !au.ended && !au._userPaused) au.play().catch(() => {}); });
+addEventListener('pageshow', () => { if (wantPlay && au.paused && !au._userPaused) au.play().catch(() => {}); });
 au.addEventListener('ended', () => { if (S.sleepEnd) { S.sleepEnd = false; au.pause(); ui(); return; } next(true); });
 au.addEventListener('timeupdate', tick);
 au.addEventListener('loadedmetadata', () => { const tr = cur(); if (tr && isFinite(au.duration) && !tr.dur) tr.dur = au.duration; tick(); });
@@ -362,7 +368,8 @@ function sess(tr) {
     const u = artUrl(tr);
     navigator.mediaSession.metadata = new MediaMetadata({ title: tr.title, artist: tr.artist, album: tr.album || '', artwork: u ? [{ src: u, sizes: '512x512' }] : [] });
     const h = (a, f) => { try { navigator.mediaSession.setActionHandler(a, f); } catch {} };
-    h('play', toggle); h('pause', toggle); h('previoustrack', prev); h('nexttrack', () => next());
+    h('play', () => { au.play().catch(() => {}); }); h('pause', () => { au._userPaused = true; au.pause(); }); h('stop', () => { au._userPaused = true; au.pause(); });
+    h('seekbackward', e => { au.currentTime = Math.max(0, au.currentTime - (e.seekOffset || 10)); }); h('seekforward', e => { au.currentTime += e.seekOffset || 10; }); h('previoustrack', prev); h('nexttrack', () => next());
     h('seekto', e => { au.currentTime = e.seekTime; });
   } catch {}
 }
@@ -757,7 +764,7 @@ function phoneScroll() {
   if (Math.abs(d) > 14 || y < 30) lastSY = y;
 }
 main.addEventListener('scroll', phoneScroll, { passive: true });
-function fitH() { try { const st = navigator.standalone || matchMedia('(display-mode: standalone)').matches; const h = st ? Math.max(innerHeight, screen.height || 0) : innerHeight; document.documentElement.style.setProperty('--ah', h + 'px'); } catch {} }
+function fitH() { try { if (!document.body.classList.contains('phone')) { document.documentElement.style.removeProperty('--ah'); return; } const st = navigator.standalone || matchMedia('(display-mode: standalone)').matches; const h = st ? Math.max(innerHeight, screen.height || 0) : innerHeight; document.documentElement.style.setProperty('--ah', h + 'px'); } catch {} }
 fitH(); addEventListener('resize', fitH); addEventListener('orientationchange', () => setTimeout(fitH, 300));
 function applyPhone() {
   fitH(); const p = isPhone(); document.body.classList.toggle('phone', p);
@@ -807,7 +814,7 @@ const CATS = [['Pop', 'pop'], ['Hits', 'hits'], ['J-POP', 'j-pop'], ['Alternativ
 const catHTML = () => CATS.map(([n, q], i) => `<div class="cat" style="--h:${(i * 47 + 340) % 360}" data-act="cat" data-q="${esc(q)}"><span>${n}</span>${ic('note')}</div>`).join('');
 let sTimer;
 function vSearch(el) {
-  const seg = [['audius', 'Audius'], ['archive', 'Internet Archive'], ['youtube', 'YouTube'], ['commons', 'Wikimedia'], ['jamendo', 'Jamendo'], ['itunes', ja ? 'iTunes(30秒)' : 'iTunes (30s)'], ['lib', t('library')]];
+  const seg = [['youtube', 'YouTube'], ['audius', 'Audius'], ['archive', 'Internet Archive'], ['commons', 'Wikimedia'], ['jamendo', 'Jamendo'], ['itunes', ja ? 'iTunes(30秒)' : 'iTunes (30s)'], ['lib', t('library')]];
   el.innerHTML = `<div class="sbar"><label class="glass sin">${ic('search')}<input id="q" type="search" placeholder="${t('searchPh')}" value="${esc(S.q)}" autocomplete="off" enterkeyhint="search"></label><button class="ib glass sxb" data-act="sclr" aria-label="Clear">${ic('xmark')}</button><div class="seg glass">${seg.map(([k, l]) => `<button class="${S.src === k ? 'on' : ''}" data-act="seg" data-s="${k}">${l}</button>`).join('')}</div></div><div class="pseg"><div class="seg2p glass"><button class="${S.src !== 'lib' ? 'on' : ''}" data-act="seg" data-s="${S.on || 'audius'}">${ja ? 'オンライン' : 'Online'}</button><button class="${S.src === 'lib' ? 'on' : ''}" data-act="seg" data-s="lib">${t('library')}</button></div>${S.src !== 'lib' ? `<div class="chips2">${seg.slice(0, 6).map(([k, l]) => `<button class="${S.src === k ? 'on' : ''}" data-act="seg" data-s="${k}">${l}</button>`).join('')}</div>` : ''}</div><div id="res"></div>`;
   $('#q', el).addEventListener('input', e => { S.q = e.target.value; clearTimeout(sTimer); sTimer = setTimeout(doSearch, 350); });
   doSearch();
@@ -988,7 +995,7 @@ document.addEventListener('click', async e => {
     case 'sclr': S.q = ''; { const i = $('#q'); if (i) { i.value = ''; i.blur(); } } doSearch(); break;
     case 'rmh': shist = shist.filter(x => x !== d.q); LS.set('shist', shist); doSearch(); break;
     case 'account': openAccount(); break;
-    case 'seg': S.src = d.s; if (d.s !== 'lib') S.on = d.s; if ($('.pseg')) { render(); break; } $$('.seg button').forEach(b => b.classList.toggle('on', b === a)); doSearch(); break;
+    case 'seg': S.src = d.s; if (d.s !== 'lib') LS.set('src', d.s); if (d.s !== 'lib') S.on = d.s; if ($('.pseg')) { render(); break; } $$('.seg button').forEach(b => b.classList.toggle('on', b === a)); doSearch(); break;
     case 'cat': S.q = d.q; { const i = $('#q'); if (i) i.value = d.q; } doSearch(); break;
     case 'clrh': shist = []; LS.set('shist', shist); render(); break;
     case 'settings': openSettings(); break;
@@ -1228,7 +1235,7 @@ function openSettings(start) {
     playback: () => grp('', trow(ja ? '自動再生' : 'Autoplay', 'auto', ST.auto) + trow(ja ? '再生位置を記憶' : 'Remember Playback', 'resume', ST.resume), ja ? '自動再生をオンにすると、キューが終わったあと同じアーティストの曲が続けて再生されます。' : 'When the queue ends, similar songs keep playing.')
       + grp(ja ? '再生速度' : 'Playback Speed', `<div class="seg2">${RT.map(r => `<button data-do="rate:${r}" class="${au.playbackRate === r ? 'on' : ''}">${r}×</button>`).join('')}</div>`)
       + grp(ja ? 'スリープタイマー' : 'Sleep Timer', [15, 30, 45, 60].map(m => btn(m + (ja ? '分' : ' min'), 'sleep:' + m)).join('') + btn(ja ? 'この曲の終わりまで' : 'End of Track', 'sleep:end') + btn(ja ? 'オフ' : 'Off', 'sleep:0')),
-    sources: () => grp(ja ? '検索の既定ソース' : 'Default Search Source', [['audius', 'Audius', ja ? 'フル再生・無料' : 'Full tracks'], ['youtube', 'YouTube', ja ? '公開サーバー経由' : 'Via public servers'], ['archive', 'Internet Archive', ja ? 'フル再生' : 'Full tracks'], ['commons', 'Wikimedia Commons', ja ? 'フル再生' : 'Full tracks'], ['jamendo', 'Jamendo', 'client_id'], ['itunes', 'iTunes', ja ? '30秒プレビュー' : '30s previews'], ['lib', t('library'), '']].map(([k, n, d]) => `<div class="srw act" data-do="src:${k}"><span>${n}${d ? `<small> ${d}</small>` : ''}</span>${S.src === k ? `<b class="ckm">${ic('check')}</b>` : ''}</div>`).join(''))
+    sources: () => grp(ja ? '検索の既定ソース' : 'Default Search Source', [['youtube', 'YouTube', ja ? '優先・動画から再生' : 'Preferred'], ['audius', 'Audius', ja ? 'フル再生・無料' : 'Full tracks'], ['archive', 'Internet Archive', ja ? 'フル再生' : 'Full tracks'], ['commons', 'Wikimedia Commons', ja ? 'フル再生' : 'Full tracks'], ['jamendo', 'Jamendo', 'client_id'], ['itunes', 'iTunes', ja ? '30秒プレビュー' : '30s previews'], ['lib', t('library'), '']].map(([k, n, d]) => `<div class="srw act" data-do="src:${k}"><span>${n}${d ? `<small> ${d}</small>` : ''}</span>${S.src === k ? `<b class="ckm">${ic('check')}</b>` : ''}</div>`).join(''))
       + grp('YouTube Data API v3', `<div class="srw act" data-do="ytkey"><span>${ja ? 'APIキー' : 'API Key'}</span><em>${ytKey() ? '••••' + ytKey().slice(-4) : (ja ? '未設定' : 'Not set')}</em><b>${ic('chevr')}</b></div>` + (ytKey() ? btn(ja ? 'APIキーを削除' : 'Remove API Key', 'ytclr', 1) : ''), ja ? 'キーを入力すると、YouTubeの検索はAPIを優先して使います(失敗時は公開サーバーに自動で切り替え)。未入力の場合は従来どおり公開サーバーで検索します。音声の再生は、どちらの場合も公開サーバー経由です。キーはこの端末にのみ保存されます。' : 'With a key, YouTube search uses the API first and falls back to public servers. Playback always goes through public servers. The key stays on this device.')
       + grp('Jamendo', `<div class="srw act" data-do="jam"><span>client_id</span><em>${jamKey() ? (ja ? '設定済み' : 'Set') : (ja ? '未設定' : 'Not set')}</em><b>${ic('chevr')}</b></div>`, ja ? 'developer.jamendo.com で無料のclient_idを取得できます。' : 'Get a free client_id at developer.jamendo.com.'),
     appearance: () => grp('', `<div class="apr">${['light', 'dark'].map(k => { const on = ST.ap === 'auto' ? (effDark() === (k === 'dark')) : ST.ap === k;
@@ -1254,7 +1261,7 @@ function openSettings(start) {
   const draw = (keep) => {
     const sc = keep ? $('.srb', el)?.scrollTop : 0;
     el.className = (el.classList.contains('show') ? 'show ' : '') + (det ? 'det' : '');
-    el.innerHTML = `<div class="sw"><aside class="sl"><div class="slh"><label class="glass sfield">${ic('search')}<input id="sq" type="search" placeholder="${ja ? '検索' : 'Search'}" value="${esc(q)}" autocomplete="off"></label></div><div class="slb">${left()}</div></aside>
+    el.innerHTML = `<div class="sw"><aside class="sl"><div class="slh"><label class="glass sfield">${ic('search')}<input id="sq" type="search" placeholder="${ja ? '検索' : 'Search'}" value="${esc(q)}" autocomplete="off"></label><button class="sx2 glass" data-sb="close" aria-label="Close">${ic('xmark')}</button></div><div class="slb">${left()}</div></aside>
       <section class="sr"><div class="sbar"><button class="sback glass" data-sb="back" aria-label="Back">${ic('chevl')}</button><h1>${title(sec)}</h1><button class="sx glass" data-sb="close" aria-label="Close">${ic('xmark')}</button></div><div class="srb sbody">${C[sec]()}</div></section></div>`;
     $$('input.gs', el).forEach(paint);
     if (keep && sc) $('.srb', el).scrollTop = sc;
@@ -1288,7 +1295,7 @@ function openSettings(start) {
     const d = t0.closest('[data-do]'); if (!d) return; const [a, v] = d.dataset.do.split(':');
     if (a === 'rate') { const r = +v; au.defaultPlaybackRate = r; au.playbackRate = r; au.preservesPitch = true; }
     else if (a === 'sleep') { if (v === 'end') { S.sleepEnd = true; toast(ja ? 'この曲の終わりで停止' : 'Stops at end of track'); } else setSleep(+v * 60); }
-    else if (a === 'src') { S.src = v; }
+    else if (a === 'src') { S.src = v; LS.set('src', v); }
     else if (a === 'ytkey') { const k = await ask('YouTube Data API v3', ja ? 'APIキー(AIza…)' : 'API key (AIza…)', ytKey()); if (k) LS.set('ytkey', k.trim()); }
     else if (a === 'ytclr') { LS.set('ytkey', ''); toast(ja ? '削除しました' : 'Removed'); }
     else if (a === 'jam') { const k = await ask('Jamendo client_id', 'client_id', jamKey()); if (k) LS.set('jamendo', k); }
