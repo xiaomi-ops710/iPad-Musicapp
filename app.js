@@ -383,7 +383,7 @@ mini.innerHTML = `
 np.innerHTML = `
   <div class="npbg"></div><div class="npgrab" data-n="close"></div>
   <div class="npbody"><div class="npstage"><div class="npart"></div><div class="nppanel"></div></div>
-  <div class="npctl">
+  <div class="npctl"><div class="npmodes"><button data-n="shuffle">${ic('shuffle')}</button><button data-n="repeat"></button><button data-n="auto">${ic('infinity')}</button><button data-n="xf">${ic('xfade')}</button></div>
     <div class="nptitle"><div><b id="npt"></b><small id="npa" data-n="artist" style="cursor:pointer"></small></div>
       <button class="ib glass fav" data-n="fav">${ic('star')}</button><button class="ib glass" data-n="more">${ic('ellipsis')}</button></div>
     <input type="range" id="seek" min="0" max="1000" value="0" style="margin-top:14px">
@@ -391,7 +391,7 @@ np.innerHTML = `
     <div class="npbtns"><button class="ib sm" data-n="shuffle">${ic('shuffle')}</button><button class="ib" data-n="prev">${ic('back')}</button>
       <button class="ib big" data-n="toggle"></button><button class="ib" data-n="next">${ic('fwd')}</button><button class="ib sm" data-n="repeat"></button></div>
     <div class="vol">${ic('spk')}<input type="range" id="vol" min="0" max="1" step="0.01" value="1">${ic('spkw')}</div>
-    <div class="npfoot"><button data-n="lyrics">${ic('quote')}</button><button data-n="route">${ic('headphones')}<small>${ja ? 'このデバイス' : 'This Device'}</small></button><button data-n="queue">${ic('list')}</button></div>
+    <div class="npfoot"><button data-n="route" aria-label="AirPlay" class="rt"><i class="rti">${ic('airaudio')}</i><small id="npdev"></small></button><span class="fr2"><button data-n="lyrics" aria-label="Lyrics">${ic('qbub')}</button><button data-n="queue" aria-label="Queue">${ic('list')}</button></span></div>
   </div></div>`;
 let seeking = false;
 const seek = $('#seek'), vol = $('#vol');
@@ -402,7 +402,7 @@ vol.addEventListener('input', () => { au.volume = +vol.value; setP(vol, vol.valu
 setP(vol, 100);
 
 function tick() {
-  lyricSync();
+  lyricSync(); xfTick();
   preNext(); saveResume();
   const d = au.duration, c = au.currentTime;
   const p = isFinite(d) && d > 0 ? c / d : 0;
@@ -440,6 +440,7 @@ function ui() {
   $('[data-m=toggle]', mini).innerHTML = pi; $('[data-n=toggle]', np).innerHTML = pi;
   const rp = ic(P.repeat === 2 ? 'repeat1' : 'repeat');
   $('[data-m=repeat]', mini).innerHTML = rp; $('[data-n=repeat]', np).innerHTML = rp;
+  $$('.npmodes [data-n=repeat]', np).forEach(b => b.innerHTML = rp); $$('.npmodes [data-n=shuffle]', np).forEach(b => b.classList.toggle('on', P.shuffle)); $$('.npmodes [data-n=repeat]', np).forEach(b => b.classList.toggle('on', P.repeat > 0)); $('.npmodes [data-n=auto]', np).classList.toggle('on', !!P.auto); $('.npmodes [data-n=xf]', np).classList.toggle('on', !!P.xf); devUI();
   [['shuffle', P.shuffle], ['repeat', P.repeat > 0]].forEach(([k, on]) => { $(`[data-m=${k}]`, mini).classList.toggle('on', on); $(`[data-n=${k}]`, np).classList.toggle('on', on); $(`[data-m=${k}]`, mini).classList.toggle('dim', !on); });
   $('.mi', mini).innerHTML = tr ? `${cov(tr)}<div class="mt"><b>${esc(tr.title)}</b><small>${esc(tr.artist)}</small></div>` : `<div class="mt"><b style="color:var(--fg2)">${t('nothing')}</b></div>`;
   if (tr) {
@@ -463,7 +464,7 @@ function npPanel(mode) {
     el.innerHTML = `<div class="ly">${ja ? '歌詞を検索中…' : 'Searching lyrics…'}</div>`;
     fetchLyrics(tr).then(L => {
       if (!cur() || cur().id !== tr.id || !np.classList.contains('mode-lyrics')) return;
-      if (L && L.synced && tr.src !== 'itunes') { lyLines = L.synced; el.innerHTML = `<div class="lyw">${L.synced.map(l => `<div class="lyl" data-t="${l.t}">${esc(l.x) || '♪'}</div>`).join('')}</div>`; }
+      if (L && L.synced && tr.src !== 'itunes') { lyLines = L.synced; el.innerHTML = `<div class="lyw">${L.synced.map(l => `<div class="lyl" data-t="${l.t}">${esc(l.x) || '♪'}</div>`).join('')}</div>`; lyBuild(); }
       else if (L && (L.plain || L.synced)) { const txt = L.plain || L.synced.map(l => l.x).join('\n'); el.innerHTML = `<div class="lyw lyp">${esc(txt).replace(/\n/g, '<br>')}</div>`; }
       else el.innerHTML = `<div class="ly">${t('lyrics')}</div>`;
       lyricSync(true);
@@ -495,6 +496,8 @@ function ctl(k) {
   if (k === 'toggle') toggle(); else if (k === 'next') next(); else if (k === 'prev') prev();
   else if (k === 'shuffle') { P.shuffle = !P.shuffle; ui(); }
   else if (k === 'repeat') { P.repeat = (P.repeat + 1) % 3; ui(); }
+  else if (k === 'auto') { P.auto = !P.auto; ui(); toast(P.auto ? (ja ? '自動再生をオンにしました' : 'Autoplay on') : (ja ? '自動再生をオフにしました' : 'Autoplay off')); }
+  else if (k === 'xf') { P.xf = !P.xf; au.volume = +vol.value; ui(); toast(P.xf ? (ja ? 'クロスフェード オン' : 'Crossfade on') : (ja ? 'クロスフェード オフ' : 'Crossfade off')); }
 }
 mini.addEventListener('click', e => {
   const b = e.target.closest('[data-m]'); if (!b) return; const k = b.dataset.m;
@@ -507,8 +510,8 @@ np.addEventListener('click', e => {
   const b = e.target.closest('[data-n]'); if (!b) return; const k = b.dataset.n;
   if (k === 'close') closeNP(); else if (k === 'lyrics' || k === 'queue') npMode(k);
   else if (k === 'fav') { const tr = cur(); if (tr) toggleFav(tr); }
-  else if (k === 'more') { if (cur()) { const r = b.getBoundingClientRect(); trackMenu(cur(), r.right - 240, r.bottom + 6, null, true); } }
-  else if (k === 'route') { if (au.webkitShowPlaybackTargetPicker) au.webkitShowPlaybackTargetPicker(); else toast(ja ? 'AirPlayはSafariでのみ利用できます' : 'AirPlay is available in Safari only'); }
+  else if (k === 'more') { if (cur()) { const r = b.getBoundingClientRect(); trackMenu(cur(), r.right - 300, r.bottom + 6, null, true); } }
+  else if (k === 'route') routePick();
   else if (k === 'artist') { const tr = cur(); if (tr && tr.artist) { closeNP(); go('iartist:' + tr.artist); } }
   else ctl(k);
 });
@@ -523,10 +526,10 @@ let tt;
 function toast(msg, ms = 2200) { const el = $('#toast'); el.textContent = msg; el.classList.add('show'); clearTimeout(tt); tt = setTimeout(() => el.classList.remove('show'), ms); }
 const menuEl = $('#menu');
 function menu(x, y, items) {
-  menuEl.innerHTML = items.map((it, i) => it === '-' ? '<hr>' : `<button data-i="${i}" class="${it.danger ? 'dg' : ''}">${it.icon ? ic(it.icon) : '<span style="width:22px"></span>'}<span>${esc(it.label)}</span></button>`).join('');
+  menuEl.innerHTML = items.map((it, i) => it === '-' ? '<hr>' : it.row ? `<div class="mrow">${it.row.map((o, j) => `<button data-i="${i}" data-j="${j}" class="${o.on ? 'on' : ''}">${ic(o.icon)}<span>${esc(o.label)}</span></button>`).join('')}</div>` : `<button data-i="${i}" class="${it.danger ? 'dg' : ''}${it.dim ? ' dm' : ''}">${it.icon ? ic(it.icon) : '<span style="width:22px"></span>'}<span class="mtx">${esc(it.label)}${it.note ? `<small>${esc(it.note)}</small>` : ''}</span></button>`).join('');
   menuEl._items = items; menuEl._pos = [x, y];
   menuEl.classList.add('show');
-  const w = Math.min(300, menuEl.offsetWidth || 260), h = menuEl.offsetHeight;
+  const w = Math.min(330, menuEl.offsetWidth || 260), h = menuEl.offsetHeight;
   const L = Math.max(10, Math.min(x, innerWidth - w - 10));
   let Tp = y; if (Tp + h > innerHeight - 10) Tp = Math.max(10, y - h - 40);
   menuEl.style.left = L + 'px'; menuEl.style.top = Tp + 'px';
@@ -535,7 +538,7 @@ function menu(x, y, items) {
 const closeMenu = () => menuEl.classList.remove('show');
 menuEl.addEventListener('click', e => {
   const b = e.target.closest('button'); if (!b) return;
-  const it = menuEl._items[+b.dataset.i];
+  let it = menuEl._items[+b.dataset.i]; if (it.row) it = it.row[+b.dataset.j];
   if (it.sub) { menu(menuEl._pos[0], menuEl._pos[1], [{ label: it.label, icon: 'chevl', act: () => 0, back: 1 }, '-', ...it.sub]); return; }
   closeMenu(); it.act && it.act();
 });
@@ -585,7 +588,30 @@ function songInfo(r) {
   m.innerHTML = `<div class="dlg glass info"><div class="ihead">${cov(r, 'sm')}<div><b>${esc(r.title)}</b><small>${esc(r.artist)}</small></div></div><div class="sgp">${f(ja ? 'アルバム' : 'Album', r.album)}${f(ja ? '長さ' : 'Duration', r.dur ? fmt(r.dur) : '')}${f(ja ? '配信元' : 'Source', SRC[r.src] || r.src)}${f(ja ? '再生回数' : 'Plays', cnt[r.id] || 0)}${f(ja ? '保存' : 'Storage', r.blob ? (ja ? 'この端末(' + (r.blob.size / 1048576).toFixed(1) + ' MB)' : 'On device (' + (r.blob.size / 1048576).toFixed(1) + ' MB)') : (ja ? 'ストリーミング' : 'Streaming'))}${f(ja ? '形式' : 'Format', r.blob ? r.blob.type : '')}</div><div class="btns"><button data-v="1" class="pri">${t('done')}</button></div></div>`;
   m.classList.add('show'); m.onclick = e => { if (e.target === m || e.target.closest('button')) m.classList.remove('show'); };
 }
+function playerMenu(tr, x, y) {
+  const r = resolve(tr), inl = lib.has(r.id), isFav = favs.has(r.id);
+  const pls = playlists.filter(p => !p.folder).map(p => ({ label: p.name, icon: 'plnote', act: async () => { await addToLib(r, true); p.songs = p.songs || []; if (!p.songs.includes(r.id)) p.songs.push(r.id); saveAll(); toast(t('added')); } })).concat([{ label: t('newPl'), icon: 'plus', act: async () => { const n = await ask(t('newPl'), t('plName')); if (n) { await addToLib(r, true); playlists.push({ id: uid('pl'), name: n, songs: [r.id] }); saveAll(); renderSidebar(); toast(t('added')); } } }]);
+  const items = [
+    { row: [{ label: isFav ? (ja ? 'お気に入り解除' : 'Unfavorite') : (ja ? 'お気に入り' : 'Favorite'), icon: isFav ? 'starfill' : 'star', on: isFav, act: () => toggleFav(r) }, { label: ja ? '共有' : 'Share', icon: 'share', act: () => doShare(r.title, r.title + ' - ' + r.artist, shareUrl(r)) }] },
+    '-',
+    { label: ja ? 'プレイリストに追加' : 'Add to Playlist', icon: 'pladd', sub: pls },
+    '-',
+  ];
+  if (r.cid || r.album) items.push({ label: ja ? 'アルバムへ移動' : 'Go to Album', note: r.album || '', icon: 'albsq', act: () => { if (r.cid) { closeNP(); go('ialbum:' + r.cid); } else { closeNP(); go('search'); setTimeout(() => { const i = $('.sin'); if (i) { i.value = r.album; i.dispatchEvent(new Event('input')); } }, 50); } } });
+  items.push({ label: ja ? 'アーティストへ移動' : 'Go to Artist', note: r.artist || '', icon: 'mic', act: () => { closeNP(); go('iartist:' + r.artist); } });
+  items.push({ label: ja ? '歌詞をすべて表示' : 'View Full Lyrics', icon: 'qbub', act: () => { if (!np.classList.contains('mode-lyrics')) npMode('lyrics'); } });
+  items.push('-', { label: ja ? 'おすすめを減らす' : 'Suggest Less Like This', icon: 'thumbd', act: () => { const d = LS.get('dis', []); if (!d.includes(r.id)) d.push(r.id); LS.set('dis', d); toast(ja ? 'おすすめを減らします' : 'Got it — fewer suggestions like this'); } });
+  items.push('-');
+  items.push({ label: ja ? 'ダウンロードしたものを削除' : 'Remove Download', icon: 'xcirc', dim: !(r.blob && r.dl), act: async () => { if (!(r.blob && r.dl)) return toast(ja ? 'ダウンロードされていません' : 'Not downloaded'); const o = { ...r }; delete o.blob; delete o.dl; lib.set(o.id, o); await idb.put(o); toast(ja ? 'ダウンロードを削除しました' : 'Download removed'); render(); } });
+  items.push(inl ? { label: ja ? 'ライブラリから削除' : 'Remove from Library', icon: 'trash', danger: true, act: async () => { await removeFromLib(r.id); render(); } } : { label: t('addLib'), icon: 'plus', act: () => addToLib(r) });
+  const more = [{ label: ja ? '次に再生' : 'Play Next', icon: 'next', act: () => { P.q.splice(P.i + 1, 0, r); toast(t('added')); } }, { label: ja ? '最後に再生' : 'Play Last', icon: 'list', act: () => { P.q.push(r); toast(t('added')); } }];
+  if (!r.blob) more.push({ label: ja ? 'オフライン用に保存' : 'Save for Offline', icon: 'download', act: () => saveOffline(r) });
+  more.push({ label: ja ? '情報を見る' : 'Get Info', icon: 'infoc', act: () => songInfo(r) }, '-', { label: ja ? '自動再生' + (P.auto ? '：オン' : '：オフ') : 'Autoplay' + (P.auto ? ': On' : ': Off'), icon: 'infinity', act: () => ctl('auto') }, speedItem(), sleepItem(), glassItem(), settingsItem());
+  items.push('-', { label: ja ? 'その他の操作' : 'More', icon: 'ellipsis', sub: more });
+  menu(x, y, items);
+}
 function trackMenu(tr, x, y, list, fromPlayer) {
+  if (fromPlayer) return playerMenu(tr, x, y);
   const r = resolve(tr), inl = lib.has(r.id), isFav = favs.has(r.id);
   const items = [
     { label: t('playNext'), icon: 'next', act: () => { P.q.splice(P.i + 1, 0, r); if (P.i < 0) { P.i = 0; load(); } toast(t('added')); } },
@@ -731,8 +757,10 @@ function phoneScroll() {
   if (Math.abs(d) > 14 || y < 30) lastSY = y;
 }
 main.addEventListener('scroll', phoneScroll, { passive: true });
+function fitH() { try { const st = navigator.standalone || matchMedia('(display-mode: standalone)').matches; const h = st ? Math.max(innerHeight, screen.height || 0) : innerHeight; document.documentElement.style.setProperty('--ah', h + 'px'); } catch {} }
+fitH(); addEventListener('resize', fitH); addEventListener('orientationchange', () => setTimeout(fitH, 300));
 function applyPhone() {
-  const p = isPhone(); document.body.classList.toggle('phone', p);
+  fitH(); const p = isPhone(); document.body.classList.toggle('phone', p);
   if (p) { setSB(false); renderPhone(); rfSizes(); rfKick(600); }
 }
 addEventListener('resize', () => { applyPhone(); });
@@ -1298,14 +1326,63 @@ async function fetchLyrics(tr) {
   const out = res ? { synced: parseLrc(res.syncedLyrics), plain: res.plainLyrics || '' } : null;
   lyc.set(tr.id, out); return out;
 }
+/* 歌詞: 間奏ドット / 手動スクロール中は自動追従を一時停止 */
+let lyUser = 0;
+function lyBuild() {
+  const w = $('.lyw', np); if (!w || !lyLines) return;
+  const rows = $$('.lyl', w), D = au.duration || 0;
+  // 空行(♪)は間奏ドットに置き換え。先頭が遅い場合も前奏ドットを入れる
+  rows.forEach((r, k) => { if (r.textContent.trim() === '♪') { r.classList.add('lyd'); r.innerHTML = '<i></i><i></i><i></i>'; r.dataset.e = lyLines[k + 1] ? lyLines[k + 1].t : (D || lyLines[k].t + 8); } });
+  if (lyLines[0] && lyLines[0].t > 6) { const d = document.createElement('div'); d.className = 'lyl lyd'; d.dataset.t = 0; d.dataset.e = lyLines[0].t; d.innerHTML = '<i></i><i></i><i></i>'; w.prepend(d); lyLines.unshift({ t: 0, x: '♪' }); }
+  const p = $('.nppanel', np);
+  if (!p._ly) { p._ly = 1; ['touchstart', 'wheel', 'pointerdown'].forEach(ev => p.addEventListener(ev, () => { lyUser = Date.now(); }, { passive: true })); }
+}
 function lyricSync(force) {
   if (!lyLines || !np.classList.contains('mode-lyrics')) return;
+  const dots = $$('.lyl.lyd.on', np);
+  if (dots.length) { const c = au.currentTime, d = dots[0], s = +d.dataset.t || 0, e = +d.dataset.e || s + 6; d.style.setProperty('--g', Math.max(0, Math.min(1, (c - s) / Math.max(1, e - s - .6)))); }
   const c = au.currentTime + .25; let i = -1;
   for (let k = 0; k < lyLines.length; k++) { if (lyLines[k].t <= c) i = k; else break; }
   if (i === lyIdx && !force) return; lyIdx = i;
   const panel = $('.nppanel', np), rows = $$('.lyl', panel);
-  rows.forEach((r, k) => { r.classList.toggle('on', k === i); r.classList.toggle('past', k < i); });
-  const a = rows[i]; if (a) panel.scrollTo({ top: a.offsetTop - panel.clientHeight / 2 + a.offsetHeight / 2, behavior: 'smooth' });
+  rows.forEach((r, k) => { r.classList.toggle('on', k === i); r.classList.toggle('past', k < i); r.style.setProperty('--d', Math.min(4, Math.abs(k - Math.max(i, 0)))); });
+  const a = rows[i]; if (a && Date.now() - lyUser > 3500) panel.scrollTo({ top: a.offsetTop - panel.clientHeight / 2 + a.offsetHeight / 2, behavior: 'smooth' });
+}
+
+/* ---- 再生デバイス表示 / クロスフェード ---- */
+let DEVN = '', DEVBT = false, DEVAP = false;
+const selfName = () => /iPad/.test(navigator.userAgent) || (/Macintosh/.test(navigator.userAgent) && navigator.maxTouchPoints > 1) ? (ja ? 'このiPad' : 'This iPad') : /iPhone|iPod/.test(navigator.userAgent) ? (ja ? 'このiPhone' : 'This iPhone') : /Android/.test(navigator.userAgent) ? (ja ? 'このスマートフォン' : 'This Phone') : (ja ? 'このコンピュータ' : 'This Computer');
+async function devScan() {
+  try {
+    const md = navigator.mediaDevices; if (!md || !md.enumerateDevices) return;
+    const ds = (await md.enumerateDevices()).filter(d => d.kind === 'audiooutput' && d.label);
+    const d = ds.find(d => d.deviceId === 'default') || ds[0];
+    if (d) { const n = d.label.replace(/^(Default|既定)\s*[-–]\s*/i, ''); DEVN = /speaker|スピーカー|built-in|内蔵/i.test(n) ? '' : n; DEVBT = /bluetooth|buds|pods|headphone|headset|ヘッドホン|イヤホン|wh-|wf-/i.test(n); }
+  } catch {}
+  devUI();
+}
+function devUI() {
+  const el = $('#npdev', np); if (!el) return;
+  const name = DEVAP ? 'AirPlay' : (DEVN || selfName());
+  el.textContent = name;
+  const i = $('.rti', np); const want = (DEVBT || DEVAP) ? (DEVAP ? 'airplay' : 'spkbt') : 'airaudio';
+  if (i && i.dataset.k !== want) { i.dataset.k = want; i.innerHTML = ic(want); }
+  const m = $('#npdev2'); if (m) m.textContent = name;
+}
+try { au.addEventListener('webkitcurrentplaybacktargetiswirelesschanged', () => { DEVAP = !!au.webkitCurrentPlaybackTargetIsWireless; devUI(); }); navigator.mediaDevices && navigator.mediaDevices.addEventListener && navigator.mediaDevices.addEventListener('devicechange', devScan); } catch {}
+async function routePick() {
+  if (au.webkitShowPlaybackTargetPicker) { au.webkitShowPlaybackTargetPicker(); return; }
+  try {
+    if (navigator.mediaDevices && navigator.mediaDevices.selectAudioOutput && au.setSinkId) { const d = await navigator.mediaDevices.selectAudioOutput(); await au.setSinkId(d.deviceId); DEVN = d.label; DEVBT = /bluetooth|buds|pods|headphone|ヘッドホン/i.test(d.label); devUI(); return; }
+  } catch { return; }
+  toast(ja ? 'この環境では出力先を切り替えられません(iOSの場合はコントロールセンターから)' : 'Output switching is not available here', 3200);
+}
+devScan();
+function xfTick() {
+  if (!P.xf) return;
+  const d = au.duration, c = au.currentTime; if (!isFinite(d) || d < 12) return;
+  let f = 1; if (d - c < 3.5) f = Math.max(.12, (d - c) / 3.5); else if (c < 3) f = Math.max(.25, c / 3);
+  au.volume = Math.min(1, +vol.value * f);
 }
 const RATES = [.75, 1, 1.25, 1.5, 2];
 const speedItem = () => ({ label: (ja ? '再生速度: ' : 'Speed: ') + au.playbackRate + '×', icon: 'clock', sub: RATES.map(r => ({ label: r + '×' + (au.playbackRate === r ? ' ✓' : ''), icon: 'play', act: () => { au.defaultPlaybackRate = r; au.playbackRate = r; au.preservesPitch = true; toast((ja ? '再生速度 ' : 'Speed ') + r + '×'); } })) });
