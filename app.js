@@ -1553,3 +1553,48 @@ function rfInit() {
   // 空のキュー表示
   const q = np.querySelector('.nppanel'); if (q) new MutationObserver(() => { if (np.classList.contains('mode-queue') && !q.querySelector('.tr') && !q.querySelector('.qempty')) q.insertAdjacentHTML('beforeend', `<div class="ly qempty">${ja ? 'このキューにはミュージックがありません。' : 'There is no music in this queue.'}</div>`); }).observe(q, { childList: true });
 })();
+
+/* ===== v41: ジェスチャー(本家風) ===== */
+(() => {
+  const trOf = el => { const l = S.lists[el.dataset.l]; return l ? l[+el.dataset.i] : null; };
+  let g = null, suppress = 0;
+  const clear = () => { if (g) { clearTimeout(g.lp); if (g.el) { g.el.style.transition = 'transform .4s var(--spring)'; g.el.style.transform = ''; g.el.classList.remove('swr', 'swl'); } } g = null; };
+  document.addEventListener('touchstart', e => {
+    if (e.touches.length !== 1) return clear();
+    const el = e.target.closest('.tr[data-tid]'), tile = !el && e.target.closest('[data-act=play][data-l]');
+    const t0 = e.touches[0], tg = el || tile; if (!tg || e.target.closest('button,input')) return;
+    g = { el: el, tg, x: t0.clientX, y: t0.clientY, mode: 0, dx: 0 };
+    g.lp = setTimeout(() => { const tr = trOf(tg); if (g && g.mode === 0 && tr) { g.mode = 3; suppress = Date.now(); try { navigator.vibrate && navigator.vibrate(12); } catch {} trackMenu(tr, Math.min(g.x, innerWidth - 300), g.y, null, false); } }, 480);
+  }, { passive: true });
+  document.addEventListener('touchmove', e => {
+    if (!g) return; const t0 = e.touches[0], dx = t0.clientX - g.x, dy = t0.clientY - g.y;
+    if (g.mode === 0) {
+      if (Math.abs(dy) > 9 || (Math.abs(dx) > 9 && !g.el)) { clearTimeout(g.lp); if (Math.abs(dy) > 9) { g = null; } return; }
+      if (g.el && Math.abs(dx) > 12 && Math.abs(dx) > Math.abs(dy) * 1.6 && !np.classList.contains('open')) { g.mode = 1; clearTimeout(g.lp); g.el.style.transition = 'none'; }
+      return;
+    }
+    if (g.mode === 1) { e.cancelable && e.preventDefault(); g.dx = dx; const d = dx > 0 ? dx * .6 : dx * .6; g.el.style.transform = `translateX(${d}px)`; g.el.classList.toggle('swr', dx > 80); g.el.classList.toggle('swl', dx < -80); }
+  }, { passive: false });
+  document.addEventListener('touchend', () => {
+    if (!g) return;
+    if (g.mode === 1) {
+      suppress = Date.now(); const tr = trOf(g.el), dx = g.dx;
+      if (tr && dx > 80) { P.q.splice(P.i + 1, 0, resolve(tr)); if (P.i < 0) { P.i = 0; load(); } toast(ja ? '次に再生に追加しました' : 'Added to Play Next', 1500); }
+      else if (tr && dx < -80) { toggleFav(tr); toast(favs.has(resolve(tr).id) ? (ja ? 'お気に入りを解除しました' : 'Removed from Favorites') : (ja ? 'お気に入りに追加しました' : 'Added to Favorites'), 1500); }
+    }
+    clear();
+  }, { passive: true });
+  document.addEventListener('touchcancel', clear, { passive: true });
+  document.addEventListener('click', e => { if (Date.now() - suppress < 400) { e.stopPropagation(); e.preventDefault(); } }, true);
+  document.addEventListener('contextmenu', e => { const el = e.target.closest('.tr[data-tid],[data-act=play][data-l]'); if (!el) return; const tr = trOf(el); if (tr) { e.preventDefault(); trackMenu(tr, e.clientX, e.clientY, null, false); } });
+  // ミニプレイヤー: 左右スワイプで曲送り・上スワイプで再生画面
+  const mi = $('.mi', mini); let m = null;
+  mini.addEventListener('touchstart', e => { if (e.target.closest('.mi')) m = { x: e.touches[0].clientX, y: e.touches[0].clientY }; }, { passive: true });
+  mini.addEventListener('touchend', e => {
+    if (!m) return; const t0 = e.changedTouches[0], dx = t0.clientX - m.x, dy = t0.clientY - m.y; m = null;
+    if (Math.abs(dx) > 60 && Math.abs(dx) > Math.abs(dy) * 1.5) { suppress = Date.now(); dx < 0 ? next() : prev(); mini.animate([{ transform: `translateX(${dx < 0 ? -24 : 24}px)`, opacity: .6 }, { transform: 'none', opacity: 1 }], { duration: 380, easing: 'cubic-bezier(.34,1.56,.64,1)' }); }
+    else if (dy < -40 && Math.abs(dy) > Math.abs(dx)) { suppress = Date.now(); openNP(); }
+  }, { passive: true });
+  // 選択中のタブを再タップで先頭へスクロール
+  document.addEventListener('click', e => { const b = e.target.closest('[data-tab]'); if (b && b.dataset.tab === S.tab && !np.classList.contains('open')) main.scrollTo({ top: 0, behavior: 'smooth' }); }, true);
+})();

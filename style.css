@@ -859,3 +859,32 @@ body.phone .pt button.on .ic{animation:tabpop .55s var(--spring)}
   #mini.rf,.pt.rf,.ps.rf,.tbtabs.rf,.tright .rf,.tbreal.rf,body.phone .pt,body.phone .ps,#mini{
     background:color-mix(in srgb,#2c2c30 55%,transparent)!important;
     box-shadow:inset 0 0 0 .6px rgba(255,255,255,.22),inset 0 1.5px 1px rgba(255,255,255,.22),inset 0 -1.5px 2px rgba(0,0,0,.3),0 8px 26px rgba(0,0,0,.45)!important}}
+
+/* ===== v40: 歌詞の間奏ドット(ピンクの縦線を修正)・iPad再生画面・YouTubeパネル ===== */
+.lyl.lyd{display:flex;align-items:center;gap:.5em;height:1.4em;padding:0;background:none;border:0;box-shadow:none}
+.lyl.lyd i{display:block;flex:none;width:.42em;height:.42em;min-width:0;border-radius:50%;background:#fff;opacity:.35;border:0;box-shadow:none;transform:scale(.8);transition:opacity .4s,transform .6s var(--spring)}
+.lyl.lyd.on i{opacity:.95;transform:scale(1)}
+.lyl.lyd.on i:nth-child(1){opacity:calc(.35 + var(--g,0) * 3)}.lyl.lyd.on i:nth-child(2){opacity:calc(.35 + (var(--g,0) - .33) * 3)}.lyl.lyd.on i:nth-child(3){opacity:calc(.35 + (var(--g,0) - .66) * 3)}
+.lyl{border:0;outline:0;caret-color:transparent;-webkit-user-select:none;user-select:none}
+.nppanel *{caret-color:transparent}
+/* iPad 横向き: 歌詞オフ=左ジャケット/右に曲名とボタン */
+@media(orientation:landscape) and (min-width:900px){
+  #np:not(.mode-lyrics):not(.mode-queue) .npbody{grid-template-columns:minmax(0,1fr) minmax(0,1fr);max-width:1180px;column-gap:5vw;grid-template-rows:1fr;align-items:center}
+  #np:not(.mode-lyrics):not(.mode-queue) .npart{grid-row:1;grid-column:1;align-self:center;justify-self:end;width:min(100%,64vh);margin:0}
+  #np:not(.mode-lyrics):not(.mode-queue) .npctl{grid-row:1;grid-column:2;align-self:center;max-width:460px;width:100%}
+}
+/* YouTubeプレーヤー: ガラスのカードに統一 */
+#ytp.show{background:color-mix(in srgb,#1c1c20 72%,transparent);-webkit-backdrop-filter:blur(30px) saturate(180%);backdrop-filter:blur(30px) saturate(180%);border-radius:26px;padding:0;box-shadow:inset 0 0 0 .6px rgba(255,255,255,.28),inset 0 1.5px 1px rgba(255,255,255,.25),0 20px 60px rgba(0,0,0,.5);animation:ytin .55s var(--spring);overflow:hidden;height:calc(min(88vw,380px) * .5625 + 56px)}
+#ytp.show .ytbar{height:44px;padding:0 10px 0 18px;background:transparent;border-radius:0;font-size:14px;font-weight:600;color:rgba(255,255,255,.85)}
+#ytp.show .ytbar::before{content:"";width:8px;height:8px;border-radius:50%;background:var(--acc);margin-right:10px;flex:none;box-shadow:0 0 10px var(--acc)}
+#ytp.show .ytbar span{flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+#ytp.show #ytx{width:30px;height:30px;border-radius:50%;background:rgba(255,255,255,.16);-webkit-backdrop-filter:blur(10px)}
+#ytp.show .ytf{top:44px;left:10px;right:10px;bottom:10px;border-radius:16px;overflow:hidden}
+#ytp.show iframe{border-radius:16px}
+@keyframes ytin{0%{opacity:0;transform:translateY(30px) scale(.9)}100%{opacity:1;transform:none}}
+
+/* v41: スワイプ操作の見た目 */
+.tr[data-tid]{position:relative;will-change:transform}
+.tr.swr{background:linear-gradient(90deg,rgba(10,132,255,.28),transparent)}
+.tr.swl{background:linear-gradient(270deg,rgba(255,214,10,.3),transparent)}
+.tr,.hs>*{-webkit-touch-callout:none}
