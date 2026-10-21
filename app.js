@@ -787,17 +787,43 @@ function renderSidebar() {
 }
 
 /* ============ 画面: ホーム ============ */
+const YTSH = LS.get('ytsh', {});
+async function ytCached(q) {
+  const c = YTSH[q]; if (c && Date.now() - c.t < 30 * 60e3) return c.l;
+  const l = (await ytSearch(q)).slice(0, 14); YTSH[q] = { t: Date.now(), l }; try { LS.set('ytsh', YTSH); } catch {} return l;
+}
+function ytShelves(el, tok) {
+  const top = topTracks(6), arts = [...new Set(top.map(x => x.artist).filter(a => a && a !== 'YouTube'))];
+  const shelves = [];
+  if (arts[0]) shelves.push([ja ? `${arts[0]} のおすすめ` : `More from ${arts[0]}`, `${arts[0]} 人気曲`]);
+  if (arts[1]) shelves.push([ja ? `${arts[1]} が好きなあなたへ` : `Because you like ${arts[1]}`, `${arts[1]} 公式 MV`]);
+  shelves.push([ja ? 'YouTubeで人気の邦楽' : 'Popular on YouTube', ja ? '邦楽 人気 ランキング 公式' : 'top music hits official']);
+  shelves.push([ja ? '新しい音楽(YouTube)' : 'New Music (YouTube)', ja ? '新曲 公式 MV' : 'new music video official']);
+  shelves.push([ja ? 'アニソン' : 'Anime Songs', ja ? 'アニメ 主題歌 人気' : 'anime opening songs']);
+  shelves.push([ja ? 'ボカロ' : 'Vocaloid', ja ? 'ボカロ 人気曲' : 'vocaloid popular']);
+  shelves.push([ja ? '作業用・チル' : 'Chill & Focus', ja ? '作業用 BGM チル' : 'lofi chill focus music']);
+  const box = $('#yts', el); if (!box) return;
+  shelves.forEach(async ([title, q], n) => {
+    await new Promise(r => setTimeout(r, n * 350));
+    try {
+      const l = await ytCached(q); if (tok !== S.tok || !l.length) return; const k = reg(l);
+      const d = document.createElement('div'); d.innerHTML = `<h2>${esc(title)}</h2><div class="hs">${l.map((x, i) => tile(null, x.title, x.artist, `data-act="play" data-l="${k}" data-i="${i}"`, x)).join('')}</div>`;
+      box.appendChild(d);
+    } catch (e) { dlog('WARN', 'yt shelf', q, e && e.message); }
+  });
+}
 async function vHome(el, _, tok) {
   const nm = uname || t('name');
   const station = `<div class="pick station" data-act="station" data-term="__mix"><svg class="art" viewBox="0 0 100 133" preserveAspectRatio="xMidYMid slice"><polygon points="-6,6 62,66 -6,126" fill="#ffb11f"/><polygon points="6,28 42,66 6,104" fill="#ff7a1a"/><polygon points="14,44 28,66 14,88" fill="#ff4d2e"/></svg><small>${t('madeFor')}</small><b>${esc(nm)}${t('station')}</b></div>`;
   const mood = `<div class="pick mood" data-act="station" data-term="${ja ? 'リラックス' : 'relax chill'}"><svg class="art" viewBox="0 0 100 133" preserveAspectRatio="xMidYMid slice"><g fill="none" stroke="#fff" stroke-width="1.4" opacity=".9"><ellipse cx="55" cy="26" rx="22" ry="9"/><ellipse cx="50" cy="50" rx="36" ry="14"/><ellipse cx="46" cy="82" rx="44" ry="20"/></g></svg><small>${t('moodFor')}</small><b>${t('relax')}</b><p>${t('relaxD')}</p></div>`;
   const rp = topTracks(5), replay = rp.length ? `<div class="pick replay" data-act="go" data-r="top"><i>Replay</i><strong>${ja ? 'あなたの<br>ベスト' : 'Your<br>Best'}</strong><small>${esc([...new Set(rp.map(x => x.artist))].slice(0, 4).join(', '))}</small></div>` : '';
   el.innerHTML = head(t('home')) + `<h2>${t('topPicks')}</h2><div class="hs" id="picks">${replay}${station}${mood}</div>
-    <h2>${t('recent')} ${ic('chevr')}</h2><div id="rec"></div><div id="heavy"></div><div id="charts"></div><div id="trend"></div>`;
+    <h2>${t('recent')} ${ic('chevr')}</h2><div id="rec"></div><div id="heavy"></div><div id="yts"></div><div id="charts"></div><div id="trend"></div>`;
   const rl = recent.map(unslim).filter(Boolean).slice(0, 14);
   $('#rec', el).innerHTML = rl.length ? `<div class="hs">${rl.map((tr, i) => { const k = reg(rl); return tile(null, tr.title, tr.artist, `data-act="play" data-l="${k}" data-i="${i}"`, tr); }).join('')}</div>` : `<small>${t('noRecent')}</small>`;
   const hv = topTracks(14).filter(x => cnt[x.id] > 1);
   if (hv.length) { const k = reg(hv); $('#heavy', el).innerHTML = `<h2>${t('heavy')} ${ic('chevr')}</h2><div class="hs">${hv.map((x, i) => tile(null, x.title, x.artist, `data-act="play" data-l="${k}" data-i="${i}"`, x)).join('')}</div>`; }
+  ytShelves(el, tok);
   try {
     const als = await itAlbums(ja ? 'J-POP ヒット' : 'top hits', 14); if (tok !== S.tok) return;
     $('#picks', el).insertAdjacentHTML('beforeend', als.slice(0, 4).map(r => `<div class="pick art" style="background-image:url('${esc((r.artworkUrl100 || '').replace('100x100', '600x600'))}')" data-act="go" data-r="ialbum:${r.collectionId}"><small>${t('album')}</small><b>${esc(r.collectionName)}</b><p>${esc(r.artistName)}</p></div>`).join(''));
@@ -1492,4 +1518,38 @@ function rfInit() {
   try { if (ST.resume) restoreResume(); } catch {}
   if ('serviceWorker' in navigator && location.protocol.startsWith('http')) navigator.serviceWorker.register('sw.js').catch(() => {});
   if (navigator.storage && navigator.storage.persist) navigator.storage.persist().catch(() => {});
+})();
+
+/* ===== v35: 安定化・操作性 ===== */
+(() => {
+  // 通信が途切れて止まった場合: 8秒待っても再生が進まなければ同じ位置から読み直す(1曲につき2回まで)
+  let stallT = 0;
+  const clearStall = () => { clearTimeout(stallT); stallT = 0; };
+  const armStall = () => {
+    if (stallT || au.paused || YTB.on) return;
+    stallT = setTimeout(() => {
+      stallT = 0; const c = cur(); if (!c || au.paused || YTB.on || !au.src) return;
+      c._stall = (c._stall || 0) + 1; if (c._stall > 2) { dlog('ERR', 'stalled', c.title); return; }
+      const t0 = au.currentTime, src = au.src; dlog('WARN', 'stalled, reloading', c.title, t0);
+      au.src = src; au.load(); au.addEventListener('loadedmetadata', () => { try { au.currentTime = t0; } catch {} au.play().catch(() => {}); }, { once: true });
+    }, 8000);
+  };
+  ['waiting', 'stalled'].forEach(e => au.addEventListener(e, armStall));
+  ['playing', 'pause', 'ended', 'emptied'].forEach(e => au.addEventListener(e, clearStall));
+  au.addEventListener('loadstart', () => { const c = cur(); if (c) c._stall = 0; });
+  addEventListener('offline', () => toast(ja ? 'オフラインです(保存した曲は再生できます)' : 'You are offline (saved songs still play)', 3000));
+  addEventListener('online', () => { toast(ja ? 'オンラインに戻りました' : 'Back online', 1800); if (wantPlay && au.paused && !au._userPaused && cur() && !cur().blob) au.play().catch(() => {}); });
+  // キーボード操作(iPad+キーボード/Mac)
+  document.addEventListener('keydown', e => {
+    if (e.target.closest && e.target.closest('input,textarea,[contenteditable]') || e.metaKey || e.ctrlKey || e.altKey) return;
+    if (e.code === 'Space') { e.preventDefault(); toggle(); }
+    else if (e.key === 'ArrowRight') { if (e.shiftKey) next(); else if (isFinite(au.duration)) au.currentTime = Math.min(au.duration, au.currentTime + 10); }
+    else if (e.key === 'ArrowLeft') { if (e.shiftKey) prev(); else au.currentTime = Math.max(0, au.currentTime - 10); }
+    else if (e.key === 'ArrowUp') { vol.value = Math.min(1, +vol.value + .05); vol.dispatchEvent(new Event('input')); }
+    else if (e.key === 'ArrowDown') { vol.value = Math.max(0, +vol.value - .05); vol.dispatchEvent(new Event('input')); }
+    else if (e.key === 'Escape') { if (np.classList.contains('open')) closeNP(); }
+    else if (e.key === 'l' || e.key === 'L') { if (cur()) { openNP(); npMode('lyrics'); } }
+  });
+  // 空のキュー表示
+  const q = np.querySelector('.nppanel'); if (q) new MutationObserver(() => { if (np.classList.contains('mode-queue') && !q.querySelector('.tr') && !q.querySelector('.qempty')) q.insertAdjacentHTML('beforeend', `<div class="ly qempty">${ja ? 'このキューにはミュージックがありません。' : 'There is no music in this queue.'}</div>`); }).observe(q, { childList: true });
 })();
