@@ -16,7 +16,7 @@ const T = {
   search: ['検索', 'Search'], home: ['ホーム', 'Home'], new: ['新着', 'New'], radio: ['ラジオ', 'Radio'],
   library: ['ライブラリ', 'Library'], pins: ['ピン', 'Pins'], recentAdded: ['最近追加した項目', 'Recently Added'], topPlayed: ['よく再生した項目', 'Most Played'], heavy: ['ヘビーローテーション', 'Heavy Rotation'], hist: ['最近の検索', 'Recent Searches'], clear: ['消去', 'Clear'],
   artists: ['アーティスト', 'Artists'], albums: ['アルバム', 'Albums'], songs: ['曲', 'Songs'],
-  uploaded: ['アップロード済み', 'Uploaded'], playlists: ['プレイリスト', 'Playlists'], allPl: ['すべてのプレイリスト', 'All Playlists'],
+  uploaded: ['ダウンロード済み', 'Downloaded'], playlists: ['プレイリスト', 'Playlists'], allPl: ['すべてのプレイリスト', 'All Playlists'],
   fav: ['お気に入りの曲', 'Favorite Songs'], edit: ['編集', 'Edit'], done: ['完了', 'Done'],
   topPicks: ['あなたへのおすすめ', 'Top Picks for You'], recent: ['最近再生した項目', 'Recently Played'],
   browse: ['カテゴリを見る', 'Browse Categories'], searchPh: ['アーティスト、曲、アルバム', 'Artists, Songs, Albums'],
@@ -662,7 +662,7 @@ function render() {
 
 /* ============ サイドバー ============ */
 const NAV = [['search', 'search', 'search'], ['home', 'house', 'home'], ['new', 'grid', 'new'], ['radio', 'radio', 'radio']];
-const LIBN = [['recent', 'clock', 'recentAdded'], ['top', 'flame', 'topPlayed'], ['artists', 'mic', 'artists'], ['albums', 'stack', 'albums'], ['songs', 'note', 'songs'], ['uploads', 'download', 'uploaded']];
+const LIBN = [['recent', 'clock', 'recentAdded'], ['top', 'flame', 'topPlayed'], ['artists', 'mic', 'artists'], ['albums', 'stack', 'albums'], ['songs', 'note1', 'songs'], ['uploads', 'download', 'uploaded']];
 /* --- 小さなスプリング物理エンジン --- */
 class Spr {
   constructor(x, k, c, ex = .05, ev = .5) { this.x = x; this.t = x; this.v = 0; this.k = k; this.c = c; this.ex = ex; this.ev = ev; }
@@ -775,13 +775,13 @@ function renderSidebar() {
   renderTop(); renderPhone();
   const ni = (r, icon, label, extra = '') => `<button class="ni${S.route === r ? ' on' : ''}" data-act="go" data-r="${r}">${ic(icon)}<span>${esc(label)}</span>${extra}</button>`;
   const grp = (id, label, body) => `<button class="sg${S.col[id] ? ' c' : ''}" data-act="col" data-id="${id}"><span>${label}</span>${ic('chevd')}</button><div class="sgc${S.col[id] ? ' c' : ''}"><div>${body}</div></div>`;
-  const pinHTML = pins.length ? pins.map((p, i) => `<button class="ni${S.route === p.r ? ' on' : ''}" data-act="${S.edit ? 'unpin' : 'go'}" data-r="${esc(p.r)}" data-i="${i}">${S.edit ? `<span class="rm">${ic('xmark')}</span>` : ic(p.r === 'fav' ? 'star' : p.r.startsWith('pl') || p.r.startsWith('folder') ? 'plnote' : 'stack')}<span>${esc(p.name)}</span></button>`).join('') : `<div style="padding:4px 14px 8px"><small>${ja ? 'プレイリストやアルバムのメニューからピン留め' : 'Pin from a playlist or album menu'}</small></div>`;
+  const pinHTML = pins.length ? pins.map((p, i) => `<button class="ni${S.route === p.r ? ' on' : ''}" data-act="${S.edit ? 'unpin' : 'go'}" data-r="${esc(p.r)}" data-i="${i}">${S.edit ? `<span class="rm">${ic('xmark')}</span>` : ic(p.r === 'fav' ? 'star' : p.r.startsWith('pl') || p.r.startsWith('folder') ? 'plnote' : 'stack')}<span>${esc(p.name)}</span></button>`).join('') : '';
   const pl = playlists.filter(p => !p.parent).map(p => ni((p.folder ? 'folder:' : 'pl:') + p.id, p.folder ? 'folder' : 'plnote', p.name)).join('');
   $('#sidebar').innerHTML = `
     <div class="sbh"><button class="ib round" style="background:rgba(255,255,255,.5);font-size:21px" data-act="mode" data-m="tabs" aria-label="Tab bar">${ic('tabbar')}</button></div>
     <div class="sbscroll">${NAV.map(([r, i, l]) => ni(r, i, t(l))).join('')}
-      ${grp('lib', t('library'), grp('pins', t('pins'), pinHTML) + LIBN.map(([r, i, l]) => ni(r, i, t(l))).join(''))}
-      ${grp('pls', t('playlists'), ni('playlists', 'grid', t('allPl')) + ni('fav', 'star', t('fav')) + pl)}
+      ${grp('lib', t('library'), `<button class="sg sgi${S.col.pins ? ' c' : ''}" data-act="col" data-id="pins">${ic('pin')}<span>${t('pins')}</span>${ic('chevd')}</button><div class="sgc${S.col.pins ? ' c' : ''}"><div>${pinHTML}</div></div>` + LIBN.map(([r, i, l]) => ni(r, i, t(l))).join(''))}
+      ${grp('pls', t('playlists'), ni('playlists', 'grid9', t('allPl')) + ni('fav', 'favtile', t('fav')) + pl)}
       <div style="height:12px"></div></div>
     <div class="profrow"><button class="prof" data-act="account"><span class="avatar">${ic('person')}</span><span>${esc(uname || t('name'))}</span></button><button class="ib" data-act="settings" aria-label="Settings">${ic('sliders')}</button></div>`;
 }

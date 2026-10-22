@@ -888,3 +888,40 @@ body.phone .pt button.on .ic{animation:tabpop .55s var(--spring)}
 .tr.swr{background:linear-gradient(90deg,rgba(10,132,255,.28),transparent)}
 .tr.swl{background:linear-gradient(270deg,rgba(255,214,10,.3),transparent)}
 .tr,.hs>*{-webkit-touch-callout:none}
+
+/* ===== v42: サイドバー/再生バーを本家iPadOSに近づける ===== */
+:root{--sbw:300px}
+@media(min-width:1001px){#sidebar{left:0;top:0;bottom:0;width:var(--sbw);border-radius:0;padding:calc(10px + var(--sat)) 10px 0;border-right:.5px solid var(--sep);
+  background:linear-gradient(160deg,color-mix(in srgb,var(--bg) 60%,#ffd9de),color-mix(in srgb,var(--bg) 78%,#f4dfe6))!important;box-shadow:none!important;-webkit-backdrop-filter:blur(40px) saturate(180%);backdrop-filter:blur(40px) saturate(180%)}
+  #sidebar::before,#sidebar::after{display:none!important}
+  body:not(.sb) #sidebar{transform:translateX(-102%)}}
+@media(prefers-color-scheme:dark){@media(min-width:1001px){#sidebar{background:linear-gradient(160deg,rgba(64,40,48,.62),rgba(30,30,34,.7))!important}}}
+.sbh{justify-content:flex-end;padding:0 6px 8px}
+.sbh .ib{width:42px;height:42px;font-size:20px;color:var(--fg)}
+.ni{gap:14px;padding:0 14px;height:42px;border-radius:13px;font-size:17px;font-weight:400;margin-bottom:1px}
+.ni .ic{font-size:21px;width:24px;flex:none}
+.ni.on{background:rgba(120,120,128,.18);box-shadow:none}
+.ni.on span{font-weight:400}
+.sg{font-size:15px;font-weight:400;color:var(--fg2);padding:18px 14px 6px}
+.sg .ic{font-size:14px;color:var(--fg2)}
+.sg.sgi{font-size:17px;color:var(--fg);padding:0 14px;height:42px;gap:14px;justify-content:flex-start;align-items:center;margin-bottom:1px;border-radius:13px}
+.sg.sgi .ic:first-child{font-size:21px;color:var(--acc);width:24px}
+.sg.sgi span{flex:1;text-align:left}
+.sg.sgi .ic:last-child{font-size:14px;color:var(--fg2)}
+.sg.sgi.c .ic:last-child{transform:rotate(-90deg)}
+.sg.sgi.c .ic:first-child{transform:none}
+.sg.c .ic{transform:rotate(-90deg)}
+.sg.sgi.c .ic:first-child{transform:none!important}
+.profrow{border-top:0}
+.prof{font-size:17px;padding:10px 12px 14px}
+/* 再生バー */
+#mini{height:56px;border-radius:99px;padding:0 18px}
+#mini .ib{font-size:19px;width:40px;height:40px;color:var(--fg)}
+#mini .ib.big{font-size:30px;width:46px;height:46px}
+#mini .ib.dim{opacity:.55}
+#mini [data-m=shuffle].on,#mini [data-m=repeat].on{color:var(--acc);opacity:1}
+#mini .mi .cov{width:38px;border-radius:7px}
+#mini .mt b{font-size:14px;font-weight:500}
+#mini .mt small{font-size:14px;color:var(--fg2)}
+#mini [data-m=more],#mini [data-m=lyrics],#mini [data-m=queue]{font-size:21px}
+#mini .prog{display:none}
