@@ -327,7 +327,7 @@ function ytReveal(on, msg) {
 }
 function ytState(s) {
   const was = YTB.st; YTB.st = s;
-  if (s === -1 || s === 5) { setTimeout(() => { if (YTB.on && (YTB.st === -1 || YTB.st === 5) && !YTB.manual) ytReveal(true, ja ? '▶ をタップして再生を開始してください' : 'Tap ▶ to start playback'); }, 1500); }
+  if (s === 1 && YTB.muted) { YTB.muted = 0; try { YTB.p.unMute(); YTB.p.setVolume(YTB.vol * 100); } catch {} }
   if (s === 1 && was !== 1) { ytEv('loadedmetadata'); ytEv('play'); }
   else if (s === 2 && was !== 2) ytEv('pause');
   else if (s === 0) { ytEv('pause'); ytEv('ended'); }
@@ -345,7 +345,12 @@ function ytOn() {
   clearInterval(YTB.iv);
   YTB.iv = setInterval(() => { if (!YTB.ready || !YTB.p) return; try { YTB.t = YTB.p.getCurrentTime() || 0; const dd = YTB.p.getDuration() || 0; if (dd && dd !== YTB.d) { YTB.d = dd; ytEv('loadedmetadata'); } if (YTB.st === 1) ytEv('timeupdate');
     const c = cur(), vd = YTB.p.getVideoData && YTB.p.getVideoData(), ad = !!(c && vd && vd.video_id && c.yt && vd.video_id !== c.yt);
-    if (ad && !YTB.manual) ytReveal(true, ja ? '広告が再生中です(終わるまでお待ちください)' : 'An ad is playing. Please wait or skip it.');
+    if (ad) {
+      YTB.adN = (YTB.adN || 0) + 1;
+      if (YTB.adN === 1) { dlog('YT', 'ad detected', vd.video_id); try { YTB.p.mute(); } catch {} }
+      if (YTB.adN === 5 && !c._adTry) { c._adTry = 1; ytStream(c.yt).then(() => { if (cur() === c && YTB.on) { toast(ja ? '広告を検知したため、広告なしの音声で再生します' : 'Ad detected; switching to ad-free audio', 3000); c._noembed = 1; ytOff(); load(); } }).catch(() => { if (cur() === c) ytReveal(true, ja ? '広告です。「スキップ」が出たらタップしてください' : 'Ad playing. Tap Skip when it appears.'); }); }
+    } else if (YTB.adN) { YTB.adN = 0; try { if (!YTB.muted) { YTB.p.unMute(); YTB.p.setVolume(YTB.vol * 100); } } catch {} }
+    if (ad && YTB.shown) { /* 広告中は表示を維持 */ }
     else if (!ad && YTB.shown && YTB.st === 1 && !YTB.manual) { YTB.okN = (YTB.okN || 0) + 1; if (YTB.okN > 6) { ytReveal(false); YTB.okN = 0; } } } catch {} }, 250);
 }
 function ytOff() {
@@ -360,7 +365,9 @@ function ytPlay(tr) {
   else YTB.pending = tr.yt;
   ytEv('timeupdate');
   setTimeout(() => { if (cur() === tr && YTB.on && (YTB.st === -1 || YTB.st === 5) && !YTB.manual) { tr._noembed = 1; ytReveal(false); toast(ja ? '埋め込みプレーヤーが応答しないため別の方法で再生します' : 'Embedded player not responding; trying another way', 3500); ytOff(); load(); } }, 14000);
-  setTimeout(() => { if (cur() === tr && YTB.on && YTB.st !== 1 && YTB.st !== 3 && !YTB.manual) ytReveal(true, ja ? '▶ をタップして再生を開始してください' : 'Tap ▶ to start playback'); }, 2500);
+  // 自動再生が止められた場合: ミュートで開始 → 再生が始まったら音を戻す(プレーヤーは出さない)
+  setTimeout(() => { if (cur() === tr && YTB.on && YTB.ready && YTB.st !== 1 && YTB.st !== 3 && !YTB.manual) { dlog('YT', 'muted autoplay attempt'); try { YTB.p.mute(); YTB.p.playVideo(); YTB.muted = 1; } catch {} } }, 1200);
+  setTimeout(() => { if (cur() === tr && YTB.on && YTB.st !== 1 && YTB.st !== 3 && !YTB.manual) ytReveal(true, ja ? '▶ をタップして再生を開始してください' : 'Tap ▶ to start playback'); }, 4500);
 }
 function sess(tr) {
   if (!('mediaSession' in navigator)) return;
@@ -1348,14 +1355,33 @@ function openSettings(start) {
 /* ============ 歌詞(LRCLIB) / 再生速度 / スリープタイマー ============ */
 const lyc = new Map(); let lyLines = null, lyIdx = -1;
 function parseLrc(x) { if (!x) return null; const out = []; for (const line of x.split('\n')) { const m = /^\[(\d+):(\d+(?:\.\d+)?)\](.*)$/.exec(line.trim()); if (m) out.push({ t: +m[1] * 60 + +m[2], x: m[3].trim() }); } return out.length ? out : null; }
+function lyCands(tr) {
+  const clean = s => (s || '').replace(/［([^］]*)］/g, '[$1]').replace(/（([^）]*)）/g, '($1)').replace(/[【\[(（][^】\])）]*(official|mv|music video|lyric|audio|ver\.?|version|full|hd|4k|公式|歌詞|フル|オリジナル|short|cover|歌ってみた)[^】\])）]*[】\])）]/gi, ' ')
+    .replace(/\b(official( music)? video|official audio|lyric video|music video|M\/V|MV|full ver\.?|full version)\b/gi, ' ').replace(/\s*(feat\.?|ft\.?)\s.*$/i, ' ').replace(/[\[(【]\s*[\])】]/g, ' ').replace(/\s+/g, ' ').trim();
+  const ch = (tr.artist || '').replace(/ - Topic$/i, '').replace(/\s*(VEVO|Official( Channel)?|公式チャンネル|公式|チャンネル)\s*$/gi, '').trim();
+  let t = tr.title || '', out = [];
+  const q = /[「『“"]([^」』”"]{1,60})[」』”"]/.exec(t); const pre = q ? t.slice(0, q.index).replace(/[【\[(（][^】\])）]*[】\])）]/g, '').trim() : '';
+  if (q) { out.push([q[1].trim(), pre || ch]); if (pre) out.push([q[1].trim(), ch]); }
+  const c = clean(t), sp = c.split(/\s+[-–—/／|｜]\s+/);
+  if (sp.length >= 2) { out.push([sp[1].trim(), sp[0].trim()]); out.push([sp[0].trim(), sp[1].trim()]); }
+  out.push([c, ch]); out.push([c, '']);
+  const seen = new Set(); return out.filter(([a, b]) => a && !seen.has(a + '|' + b) && seen.add(a + '|' + b)).slice(0, 6);
+}
 async function fetchLyrics(tr) {
   if (lyc.has(tr.id)) return lyc.get(tr.id);
-  const q = `track_name=${encodeURIComponent(tr.title)}&artist_name=${encodeURIComponent(tr.artist)}`; let res = null;
-  try {
-    let r = await fetch(`https://lrclib.net/api/get?${q}${tr.album ? '&album_name=' + encodeURIComponent(tr.album) : ''}${tr.dur && tr.src !== 'itunes' ? '&duration=' + Math.round(tr.dur) : ''}`);
-    if (r.ok) res = await r.json();
-    if (!res || (!res.syncedLyrics && !res.plainLyrics)) { r = await fetch(`https://lrclib.net/api/search?${q}`); if (r.ok) { const arr = await r.json(); res = arr.find(x => x.syncedLyrics) || arr.find(x => x.plainLyrics) || null; } }
-  } catch {}
+  const yt = tr.src === 'youtube', J = async u => { try { const r = await fetch(u); return r.ok ? await r.json() : null; } catch { return null; } };
+  const pick = (arr, d) => { arr = (arr || []).filter(x => x && (x.syncedLyrics || x.plainLyrics)); if (!arr.length) return null; if (d) arr.sort((p, q) => Math.abs((p.duration || 0) - d) - Math.abs((q.duration || 0) - d)); const s = arr.filter(x => x.syncedLyrics); return s[0] || arr[0]; };
+  let res = null;
+  const base = [[tr.title, tr.artist]]; const cands = yt ? lyCands(tr) : base;
+  for (const [t, ar] of cands) {
+    const q = `track_name=${encodeURIComponent(t)}${ar ? '&artist_name=' + encodeURIComponent(ar) : ''}`;
+    if (!yt) {
+      let r = await J(`https://lrclib.net/api/get?${q}${tr.album ? '&album_name=' + encodeURIComponent(tr.album) : ''}${tr.dur && tr.src !== 'itunes' ? '&duration=' + Math.round(tr.dur) : ''}`);
+      if (r && (r.syncedLyrics || r.plainLyrics)) { res = r; break; }
+    }
+    res = pick(await J(`https://lrclib.net/api/search?${q}`), yt ? tr.dur : 0); if (res) break;
+    res = pick(await J(`https://lrclib.net/api/search?q=${encodeURIComponent((ar ? ar + ' ' : '') + t)}`), yt ? tr.dur : 0); if (res) break;
+  }
   const out = res ? { synced: parseLrc(res.syncedLyrics), plain: res.plainLyrics || '' } : null;
   lyc.set(tr.id, out); return out;
 }
