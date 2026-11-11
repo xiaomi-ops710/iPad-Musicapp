@@ -52,7 +52,7 @@ const shuf = a => { a = a.slice(); for (let i = a.length - 1; i > 0; i--) { cons
 const sleep = ms => new Promise(r => setTimeout(r, ms));
 
 /* ============ 状態 ============ */
-const S = { mode: LS.get('mode', 'sidebar'), tab: 'home', route: 'home', stack: [], lists: {}, src: LS.get('src', 'youtube'), q: '', sb: innerWidth > 1000, col: LS.get('col', {}), edit: false, tok: 0, lk: 0 };
+const S = { mode: LS.get('mode', 'sidebar'), tab: 'home', route: 'home', stack: [], lists: {}, src: LS.get('src', 'youtube'), on: LS.get('src', 'youtube') === 'lib' ? 'youtube' : LS.get('src', 'youtube'), q: '', sb: innerWidth > 1000, col: LS.get('col', {}), edit: false, tok: 0, lk: 0 };
 let playlists = LS.get('pl', []);
 let favs = new Set(LS.get('fav', []));
 let recent = LS.get('recent', []);
@@ -75,6 +75,7 @@ const idb = {
 /* ============ トラック補助 ============ */
 const urlCache = new Map();
 const blobUrl = (id, k, b) => { const key = id + k; if (!urlCache.has(key)) urlCache.set(key, URL.createObjectURL(b)); return urlCache.get(key); };
+const dropUrls = id => { for (const k of [id + 's', id + 'a']) { const u = urlCache.get(k); if (u) { URL.revokeObjectURL(u); urlCache.delete(k); } } };
 const artUrl = tr => !tr || !tr.art ? null : (tr.art instanceof Blob ? blobUrl(tr.id, 'a', tr.art) : tr.art);
 const audioUrl = tr => tr.blob ? blobUrl(tr.id, 's', tr.blob) : tr.url;
 const hue = s => { let h = 0; for (const c of String(s)) h = (h * 31 + c.charCodeAt(0)) % 360; return h; };
@@ -89,6 +90,20 @@ const fromIt = r => ({ id: 'it' + r.trackId, title: r.trackName, artist: r.artis
 /* --- YouTube (公開のPiped / Invidiousインスタンス経由で検索・音声ストリーム取得。インスタンスは落ちることがあるため複数を並行して試す) --- */
 const PIPED = ['https://pipedapi.kavin.rocks', 'https://pipedapi.adminforge.de', 'https://api.piped.private.coffee', 'https://pipedapi.leptons.xyz', 'https://pipedapi.nosebs.ru'];
 const INV = ['https://yewtu.be', 'https://inv.nadeko.net', 'https://invidious.nerdvpn.de', 'https://invidious.privacyredirect.com'];
+/* 公開インスタンスは入れ替わりが早いため、各インスタンス一覧サービスから現在稼働中のものを取得(1時間キャッシュ)。取得できなければ上の既定リストを使う */
+let ytInst = null;
+async function ytInstances() {
+  if (ytInst) return ytInst;
+  const c = LS.get('ytinst', null);
+  if (c && Date.now() - c.t < 3600e3 && c.piped && c.piped.length) return ytInst = c;
+  let piped = [], inv = [];
+  try { const j = await (await fetch('https://piped-instances.kavin.rocks/', { signal: AbortSignal.timeout(6000) })).json(); piped = j.filter(x => x && x.api_url).sort((a, b) => (b.up_to_date === true) - (a.up_to_date === true)).map(x => x.api_url.replace(/\/$/, '')); } catch {}
+  try { const j = await (await fetch('https://api.invidious.io/instances.json?sort_by=health', { signal: AbortSignal.timeout(6000) })).json(); inv = j.filter(([, v]) => v && v.api && v.type === 'https' && v.uri).map(([, v]) => v.uri.replace(/\/$/, '')); } catch {}
+  const ok = piped.length || inv.length;
+  ytInst = { t: Date.now(), piped: [...new Set([...piped, ...PIPED])].slice(0, 12), inv: [...new Set([...inv, ...INV])].slice(0, 10) };
+  if (ok) LS.set('ytinst', ytInst);
+  return ytInst;
+}
 const anyOf = (urls, parse) => Promise.any(urls.map(async u => { try { const r = await fetch(u, { signal: AbortSignal.timeout(8000) }); if (!r.ok) throw new Error('HTTP ' + r.status); const v = parse(await r.json(), u); dlog('NET', 'OK', u); return v; } catch (e) { dlog('ERR', 'NET', u.split('?')[0], e.message || e); throw e; } }));
 const ytTrack = (id, title, artist, dur, art) => ({ id: 'yt' + id, yt: id, title, artist: (artist || 'YouTube').replace(/ - Topic$/, ''), album: 'YouTube', dur: dur || 0, url: null, art: `https://i.ytimg.com/vi/${id}/mqdefault.jpg`, src: 'youtube' });
 const ytKey = () => (LS.get('ytkey', '') || '').trim();
@@ -105,26 +120,27 @@ async function ytApiSearch(q, key) {
 async function ytSearch(q) {
   const key = ytKey();
   if (key) { try { return await ytApiSearch(q, key); } catch (e) { toast(ja ? 'YouTube APIで検索できなかったため、公開サーバーで検索します' : 'YouTube API failed; using public servers', 3000); } }
+  const I = await ytInstances();
   const enc = encodeURIComponent(q);
-  const run = async f => anyOf(PIPED.map(b => `${b}/search?q=${enc}&filter=${f}`), j => { const l = (j.items || []).filter(i => i.url && /watch\?v=/.test(i.url)); if (!l.length) throw 0; return l.map(i => ytTrack(i.url.split('v=')[1].split('&')[0], i.title, i.uploaderName, i.duration, i.thumbnail)); });
+  const run = async f => anyOf(I.piped.map(b => `${b}/search?q=${enc}&filter=${f}`), j => { const l = (j.items || []).filter(i => i.url && /watch\?v=/.test(i.url)); if (!l.length) throw 0; return l.map(i => ytTrack(i.url.split('v=')[1].split('&')[0], i.title, i.uploaderName, i.duration, i.thumbnail)); });
   try { return await run('music_songs'); } catch {}
   try { return await run('videos'); } catch {}
-  return anyOf(INV.map(b => `${b}/api/v1/search?q=${enc}&type=video`), j => { if (!j.length) throw 0; return j.map(v => ytTrack(v.videoId, v.title, v.author, v.lengthSeconds, v.videoThumbnails && v.videoThumbnails[0] && v.videoThumbnails[0].url)); });
+  return anyOf(I.inv.map(b => `${b}/api/v1/search?q=${enc}&type=video`), j => { if (!j.length) throw 0; return j.map(v => ytTrack(v.videoId, v.title, v.author, v.lengthSeconds, v.videoThumbnails && v.videoThumbnails[0] && v.videoThumbnails[0].url)); });
 }
 const ytCache = {};
 async function ytStream(id, invOnly) {
   if (ytCache[id] && !invOnly) return ytCache[id];
-  let u;
+  let u; const I = await ytInstances();
   try {
     if (invOnly) throw 0;
-    u = await anyOf(PIPED.map(b => `${b}/streams/${id}`), j => {
+    u = await anyOf(I.piped.map(b => `${b}/streams/${id}`), j => {
       const a = (j.audioStreams || []).filter(s => /mp4|aac|m4a/i.test(s.mimeType || '')).sort((x, y) => y.bitrate - x.bitrate)[0]; if (!a) throw 0;
       const x = new URL(a.url);
       if (j.proxyUrl) { const p = new URL(j.proxyUrl); x.searchParams.set('host', x.hostname); x.protocol = p.protocol; x.hostname = p.hostname; x.port = p.port; }
       return x.href;
     });
   }
-  catch { u = await anyOf(INV.map(b => `${b}/api/v1/videos/${id}?local=true`), (j, base) => { const a = (j.adaptiveFormats || []).filter(f => /audio\/mp4/.test(f.type || '')).sort((x, y) => (+y.bitrate) - (+x.bitrate))[0]; if (!a) throw 0; return a.url.startsWith('http') ? a.url : base + a.url; }); }
+  catch { u = await anyOf(I.inv.map(b => `${b}/api/v1/videos/${id}?local=true`), (j, base) => { const a = (j.adaptiveFormats || []).filter(f => /audio\/mp4/.test(f.type || '')).sort((x, y) => (+y.bitrate) - (+x.bitrate))[0]; if (!a) throw 0; return a.url.startsWith('http') ? a.url : base + a.url; }); }
   return ytCache[id] = u;
 }
 const AUD = 'https://api.audius.co/v1';
@@ -139,7 +155,7 @@ async function addToLib(tr, quiet) {
   if (!quiet) toast(t('added'));
 }
 async function removeFromLib(id) {
-  lib.delete(id); await idb.del(id); favs.delete(id);
+  lib.delete(id); await idb.del(id); favs.delete(id); dropUrls(id);
   playlists.forEach(p => p.songs && (p.songs = p.songs.filter(x => x !== id)));
   recent = recent.filter(m => m.id !== id); saveAll();
 }
@@ -283,8 +299,8 @@ function next(auto) {
   if (P.shuffle && P.q.length > 1) { P.hist.push(P.i); let j; do j = Math.random() * P.q.length | 0; while (j === P.i); P.i = j; }
   else if (P.i + 1 < P.q.length) { P.hist.push(P.i); P.i++; }
   else if (P.repeat === 1) { P.hist.push(P.i); P.i = 0; }
-  else if (auto && P.auto && !P.fetching) { P.fetching = 1; const c = cur(); auSearch(c.artist, 12).then(l => { const have = new Set(P.q.map(x => x.id)); l = l.filter(x => !have.has(x.id)); if (l.length) { P.q.push(...l); P.hist.push(P.i); P.i++; load(); } else { au.pause(); ui(); } }).catch(() => { au.pause(); ui(); }).finally(() => P.fetching = 0); return; }
-  else { au.pause(); au.currentTime = 0; ui(); return; }
+  else if (auto && P.auto && !P.fetching) { P.fetching = 1; const c = cur(); auSearch(c.artist, 12).then(l => { const have = new Set(P.q.map(x => x.id)); l = l.filter(x => !have.has(x.id)); if (l.length) { P.q.push(...l); P.hist.push(P.i); P.i++; load(); } else { wantPlay = false; au.pause(); ui(); } }).catch(() => { wantPlay = false; au.pause(); ui(); }).finally(() => P.fetching = 0); return; }
+  else { wantPlay = false; au.pause(); au.currentTime = 0; ui(); return; }
   load();
 }
 function prev() {
@@ -299,7 +315,7 @@ au.addEventListener('timeupdate', () => { try { if (isFinite(au.duration) && nav
 /* バックグラウンド: 画面を離れた/ロックで止まった場合は復帰時に再開 */
 document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible' && wantPlay && au.paused && au.src && !au.ended && !au._userPaused) au.play().catch(() => {}); });
 addEventListener('pageshow', () => { if (wantPlay && au.paused && !au._userPaused) au.play().catch(() => {}); });
-au.addEventListener('ended', () => { if (S.sleepEnd) { S.sleepEnd = false; au.pause(); ui(); return; } next(true); });
+au.addEventListener('ended', () => { if (S.sleepEnd) { S.sleepEnd = false; wantPlay = false; au.pause(); ui(); return; } next(true); });
 au.addEventListener('timeupdate', tick);
 au.addEventListener('loadedmetadata', () => { const tr = cur(); if (tr && isFinite(au.duration) && !tr.dur) tr.dur = au.duration; tick(); });
 au.addEventListener('error', () => {
@@ -343,7 +359,7 @@ function ytOn() {
   d('play', { value: () => { try { YTB.p && YTB.p.playVideo(); } catch {} return Promise.resolve(); } });
   d('pause', { value: () => { try { YTB.p && YTB.p.pauseVideo(); } catch {} } });
   clearInterval(YTB.iv);
-  YTB.iv = setInterval(() => { if (!YTB.ready || !YTB.p) return; try { YTB.t = YTB.p.getCurrentTime() || 0; const dd = YTB.p.getDuration() || 0; if (dd && dd !== YTB.d) { YTB.d = dd; ytEv('loadedmetadata'); } if (YTB.st === 1) ytEv('timeupdate');
+  YTB.iv = setInterval(() => { if (!YTB.ready || !YTB.p) return; try { YTB.t = YTB.p.getCurrentTime() || 0; const dd = YTB.p.getDuration() || 0; if (dd && dd !== YTB.d) { YTB.d = dd; ytEv('loadedmetadata'); const cc = cur(); if (cc && cc.yt && Math.abs((cc.dur || 0) - dd) > 1) cc.dur = dd; } if (YTB.st === 1) ytEv('timeupdate');
     const c = cur(), vd = YTB.p.getVideoData && YTB.p.getVideoData(), ad = !!(c && vd && vd.video_id && c.yt && vd.video_id !== c.yt);
     if (ad) {
       YTB.adN = (YTB.adN || 0) + 1;
@@ -407,6 +423,7 @@ np.innerHTML = `
     <div class="vol">${ic('spk')}<input type="range" id="vol" min="0" max="1" step="0.01" value="1">${ic('spkw')}</div>
     <div class="npfoot"><button data-n="route" aria-label="AirPlay" class="rt"><i class="rti">${ic('airaudio')}</i><small id="npdev"></small></button><span class="fr2"><button data-n="lyrics" aria-label="Lyrics">${ic('qbub')}</button><button data-n="queue" aria-label="Queue">${ic('list')}</button></span></div>
   </div></div>`;
+np.insertAdjacentHTML('beforeend', `<div id="lyoff" class="lyoff"><button data-lo="-0.5" aria-label="-0.5s">−0.5s</button><span id="lyoffv">+0.0s</span><button data-lo="0.5" aria-label="+0.5s">+0.5s</button><button data-lo="reset">${ja ? 'リセット' : 'Reset'}</button></div>`);
 let seeking = false;
 const seek = $('#seek'), vol = $('#vol');
 const setP = (el, v) => el.style.setProperty('--p', v + '%');
@@ -430,23 +447,20 @@ function preNext() {
   preFor = n.id; try { preA = new Audio(); preA.preload = 'auto'; preA.src = audioUrl(n); } catch {}
 }
 function saveResume() {
-  const now = Date.now(); if (now - lastSave < 4000 || !cur()) return; lastSave = now;
+  const now = Date.now(); if (!ST.resume || now - lastSave < 4000 || !cur()) return; lastSave = now;
   try { LS.set('resume', { q: P.q.slice(0, 80).map(slim), i: Math.min(P.i, 79), t: au.currentTime }); } catch {}
 }
 function restoreResume() {
   const r = LS.get('resume', null); if (!r || !r.q) return;
-  const q = r.q.map(unslim).filter(Boolean); if (!q.length || !q[r.i]) return;
-  P.q = q; P.i = r.i; const tr = cur();
+  const q = []; let idx = -1;
+  r.q.forEach((m, k) => { const x = unslim(m); if (x) { if (k === r.i) idx = q.length; q.push(x); } });
+  if (!q.length || idx < 0) return;
+  P.q = q; P.i = idx; const tr = cur();
   if (tr.src === 'youtube') { sess(tr); ui(); return; }
   au.src = audioUrl(tr); au.addEventListener('loadedmetadata', () => { try { au.currentTime = r.t || 0; } catch {} }, { once: true });
   sess(tr); ui();
 }
-document.addEventListener('keydown', e => {
-  if (/INPUT|TEXTAREA/.test(document.activeElement && document.activeElement.tagName)) return;
-  if (e.code === 'Space') { e.preventDefault(); toggle(); }
-  else if (e.shiftKey && e.key === 'ArrowRight') next();
-  else if (e.shiftKey && e.key === 'ArrowLeft') prev();
-});
+// キーボード操作は下部(v35)のハンドラに一本化(重複すると矢印キーで複数回の操作が走るため)
 if ('webkitCurrentPlaybackTargetIsWireless' in au) au.addEventListener('webkitcurrentplaybacktargetiswirelesschanged', () => { const s = $('[data-n=route] small', np); if (s) s.textContent = au.webkitCurrentPlaybackTargetIsWireless ? 'AirPlay' : (ja ? 'このデバイス' : 'This Device'); });
 function ui() {
   const tr = cur(), playing = !au.paused && !!tr;
@@ -473,12 +487,12 @@ function ui() {
 function npPanel(mode) {
   const el = $('.nppanel', np), tr = cur();
   if (mode === 'lyrics') {
-    S.lyFor = tr && tr.id; lyLines = null; lyIdx = -1;
+    S.lyFor = tr && tr.id; lyLines = null; lyIdx = -1; np.classList.remove('lyon');
     if (!tr) { el.innerHTML = `<div class="ly">${t('lyrics')}</div>`; return; }
     el.innerHTML = `<div class="ly">${ja ? '歌詞を検索中…' : 'Searching lyrics…'}</div>`;
     fetchLyrics(tr).then(L => {
       if (!cur() || cur().id !== tr.id || !np.classList.contains('mode-lyrics')) return;
-      if (L && L.synced && tr.src !== 'itunes') { lyLines = L.synced; el.innerHTML = `<div class="lyw">${L.synced.map(l => `<div class="lyl" data-t="${l.t}">${esc(l.x) || '♪'}</div>`).join('')}</div>`; lyBuild(); }
+      if (L && L.synced && tr.src !== 'itunes') { lyLines = L.synced; np.classList.add('lyon'); lyoffShow(tr); el.innerHTML = `<div class="lyw">${L.synced.map(l => `<div class="lyl" data-t="${l.t}">${esc(l.x) || '♪'}</div>`).join('')}</div>`; lyBuild(); }
       else if (L && (L.plain || L.synced)) { const txt = L.plain || L.synced.map(l => l.x).join('\n'); el.innerHTML = `<div class="lyw lyp">${esc(txt).replace(/\n/g, '<br>')}</div>`; }
       else el.innerHTML = `<div class="ly">${t('lyrics')}</div>`;
       lyricSync(true);
@@ -510,7 +524,7 @@ function ctl(k) {
   if (k === 'toggle') toggle(); else if (k === 'next') next(); else if (k === 'prev') prev();
   else if (k === 'shuffle') { P.shuffle = !P.shuffle; ui(); }
   else if (k === 'repeat') { P.repeat = (P.repeat + 1) % 3; ui(); }
-  else if (k === 'auto') { P.auto = !P.auto; ui(); toast(P.auto ? (ja ? '自動再生をオンにしました' : 'Autoplay on') : (ja ? '自動再生をオフにしました' : 'Autoplay off')); }
+  else if (k === 'auto') { P.auto = !P.auto; ST.auto = P.auto ? 1 : 0; LS.set('set', ST); ui(); toast(P.auto ? (ja ? '自動再生をオンにしました' : 'Autoplay on') : (ja ? '自動再生をオフにしました' : 'Autoplay off')); }
   else if (k === 'xf') { P.xf = !P.xf; au.volume = +vol.value; ui(); toast(P.xf ? (ja ? 'クロスフェード オン' : 'Crossfade on') : (ja ? 'クロスフェード オフ' : 'Crossfade off')); }
 }
 mini.addEventListener('click', e => {
@@ -520,6 +534,8 @@ mini.addEventListener('click', e => {
   else ctl(k);
 });
 np.addEventListener('click', e => {
+  const lo = e.target.closest('[data-lo]');
+  if (lo) { const tr = cur(); if (!tr) return; const o = LS.get('lyoff', {}); const v = lo.dataset.lo === 'reset' ? 0 : Math.round((lyOff(tr) + +lo.dataset.lo) * 10) / 10; if (v) o[tr.id] = v; else delete o[tr.id]; LS.set('lyoff', o); lyoffShow(tr); lyricSync(true); return; }
   const ll = e.target.closest('.lyl'); if (ll) { au.currentTime = +ll.dataset.t; au.play().catch(() => {}); return; }
   const b = e.target.closest('[data-n]'); if (!b) return; const k = b.dataset.n;
   if (k === 'close') closeNP(); else if (k === 'lyrics' || k === 'queue') npMode(k);
@@ -539,7 +555,8 @@ async function toggleFav(tr) {
 let tt;
 function toast(msg, ms = 2200) { const el = $('#toast'); el.textContent = msg; el.classList.add('show'); clearTimeout(tt); tt = setTimeout(() => el.classList.remove('show'), ms); }
 const menuEl = $('#menu');
-function menu(x, y, items) {
+function menu(x, y, items, keep) {
+  if (!keep) menuEl._stack = [];
   menuEl.innerHTML = items.map((it, i) => it === '-' ? '<hr>' : it.row ? `<div class="mrow">${it.row.map((o, j) => `<button data-i="${i}" data-j="${j}" class="${o.on ? 'on' : ''}">${ic(o.icon)}<span>${esc(o.label)}</span></button>`).join('')}</div>` : `<button data-i="${i}" class="${it.danger ? 'dg' : ''}${it.dim ? ' dm' : ''}">${it.icon ? ic(it.icon) : '<span style="width:22px"></span>'}<span class="mtx">${esc(it.label)}${it.note ? `<small>${esc(it.note)}</small>` : ''}</span></button>`).join('');
   menuEl._items = items; menuEl._pos = [x, y];
   menuEl.classList.add('show');
@@ -553,7 +570,8 @@ const closeMenu = () => menuEl.classList.remove('show');
 menuEl.addEventListener('click', e => {
   const b = e.target.closest('button'); if (!b) return;
   let it = menuEl._items[+b.dataset.i]; if (it.row) it = it.row[+b.dataset.j];
-  if (it.sub) { menu(menuEl._pos[0], menuEl._pos[1], [{ label: it.label, icon: 'chevl', act: () => 0, back: 1 }, '-', ...it.sub]); return; }
+  if (it.back) { const p = (menuEl._stack || []).pop(); if (p) menu(p.pos[0], p.pos[1], p.items, true); return; }
+  if (it.sub) { const st = menuEl._stack || []; st.push({ items: menuEl._items, pos: menuEl._pos }); menu(menuEl._pos[0], menuEl._pos[1], [{ label: it.label, icon: 'chevl', back: 1 }, '-', ...it.sub], true); menuEl._stack = st; return; }
   closeMenu(); it.act && it.act();
 });
 document.addEventListener('pointerdown', e => { if (!e.target.closest('#menu')) closeMenu(); }, true);
@@ -591,7 +609,7 @@ async function saveOffline(r) {
   try {
     const res = await fetch(audioUrl(r)); if (!res.ok) throw 0;
     const blob = await res.blob(); if (!blob.size) throw 0;
-    const o = { ...r, blob, dl: 1, added: r.added || Date.now() }; delete o.url;
+    const o = { ...r, blob, dl: 1, added: r.added || Date.now() };
     if (typeof r.art === 'string' && r.art.startsWith('http')) { try { const ar = await fetch(r.art); if (ar.ok) o.art = await ar.blob(); } catch {} }
     lib.set(o.id, o); await idb.put(o); toast(ja ? 'オフライン用に保存しました' : 'Saved for offline'); render();
   } catch { toast(ja ? 'この曲は保存できません(配信元が許可していません)' : 'This track cannot be saved (blocked by source)', 3500); }
@@ -611,15 +629,15 @@ function playerMenu(tr, x, y) {
     { label: ja ? 'プレイリストに追加' : 'Add to Playlist', icon: 'pladd', sub: pls },
     '-',
   ];
-  if (r.cid || r.album) items.push({ label: ja ? 'アルバムへ移動' : 'Go to Album', note: r.album || '', icon: 'albsq', act: () => { if (r.cid) { closeNP(); go('ialbum:' + r.cid); } else { closeNP(); go('search'); setTimeout(() => { const i = $('.sin'); if (i) { i.value = r.album; i.dispatchEvent(new Event('input')); } }, 50); } } });
+  if (r.cid || r.album) items.push({ label: ja ? 'アルバムへ移動' : 'Go to Album', note: r.album || '', icon: 'albsq', act: () => { if (r.cid) { closeNP(); go('ialbum:' + r.cid); } else { closeNP(); S.q = r.album || ''; go('search'); } } });
   items.push({ label: ja ? 'アーティストへ移動' : 'Go to Artist', note: r.artist || '', icon: 'mic', act: () => { closeNP(); go('iartist:' + r.artist); } });
   items.push({ label: ja ? '歌詞をすべて表示' : 'View Full Lyrics', icon: 'qbub', act: () => { if (!np.classList.contains('mode-lyrics')) npMode('lyrics'); } });
   items.push('-', { label: ja ? 'おすすめを減らす' : 'Suggest Less Like This', icon: 'thumbd', act: () => { const d = LS.get('dis', []); if (!d.includes(r.id)) d.push(r.id); LS.set('dis', d); toast(ja ? 'おすすめを減らします' : 'Got it — fewer suggestions like this'); } });
   items.push('-');
-  items.push({ label: ja ? 'ダウンロードしたものを削除' : 'Remove Download', icon: 'xcirc', dim: !(r.blob && r.dl), act: async () => { if (!(r.blob && r.dl)) return toast(ja ? 'ダウンロードされていません' : 'Not downloaded'); const o = { ...r }; delete o.blob; delete o.dl; lib.set(o.id, o); await idb.put(o); toast(ja ? 'ダウンロードを削除しました' : 'Download removed'); render(); } });
+  items.push({ label: ja ? 'ダウンロードしたものを削除' : 'Remove Download', icon: 'xcirc', dim: !(r.blob && r.dl), act: async () => { if (!(r.blob && r.dl)) return toast(ja ? 'ダウンロードされていません' : 'Not downloaded'); const o = { ...r }; delete o.blob; delete o.dl; dropUrls(o.id); lib.set(o.id, o); await idb.put(o); toast(ja ? 'ダウンロードを削除しました' : 'Download removed'); render(); } });
   items.push(inl ? { label: ja ? 'ライブラリから削除' : 'Remove from Library', icon: 'trash', danger: true, act: async () => { await removeFromLib(r.id); render(); } } : { label: t('addLib'), icon: 'plus', act: () => addToLib(r) });
   const more = [{ label: ja ? '次に再生' : 'Play Next', icon: 'next', act: () => { P.q.splice(P.i + 1, 0, r); toast(t('added')); } }, { label: ja ? '最後に再生' : 'Play Last', icon: 'list', act: () => { P.q.push(r); toast(t('added')); } }];
-  if (!r.blob) more.push({ label: ja ? 'オフライン用に保存' : 'Save for Offline', icon: 'download', act: () => saveOffline(r) });
+  if (!r.blob && r.src !== 'youtube') more.push({ label: ja ? 'オフライン用に保存' : 'Save for Offline', icon: 'download', act: () => saveOffline(r) });
   more.push({ label: ja ? '情報を見る' : 'Get Info', icon: 'infoc', act: () => songInfo(r) }, '-', { label: ja ? '自動再生' + (P.auto ? '：オン' : '：オフ') : 'Autoplay' + (P.auto ? ': On' : ': Off'), icon: 'infinity', act: () => ctl('auto') }, speedItem(), sleepItem(), glassItem(), settingsItem());
   items.push('-', { label: ja ? 'その他の操作' : 'More', icon: 'ellipsis', sub: more });
   menu(x, y, items);
@@ -638,7 +656,7 @@ function trackMenu(tr, x, y, list, fromPlayer) {
   if (r.cid) items.push({ label: ja ? 'アルバムに移動' : 'Go to Album', icon: 'stack', act: () => { if (fromPlayer) closeNP(); go('ialbum:' + r.cid); } });
   items.push({ label: ja ? '共有…' : 'Share…', icon: 'share', act: () => doShare(r.title, r.title + ' - ' + r.artist, shareUrl(r)) });
   items.push({ label: ja ? '情報を見る' : 'Get Info', icon: 'infoc', act: () => songInfo(r) });
-  if (!r.blob) items.push({ label: ja ? 'オフライン用に保存' : 'Save for Offline', icon: 'download', act: () => saveOffline(r) });
+  if (!r.blob && r.src !== 'youtube') items.push({ label: ja ? 'オフライン用に保存' : 'Save for Offline', icon: 'download', act: () => saveOffline(r) });
   else if (r.dl) items.push({ label: ja ? 'オフライン保存済み' : 'Saved Offline', icon: 'check', act: () => {} });
   if (!inl) items.push({ label: t('addLib'), icon: 'plus', act: () => addToLib(r) });
   else items.push({ label: t('rmLib'), icon: 'trash', danger: true, act: async () => { await removeFromLib(r.id); render(); } });
@@ -771,14 +789,15 @@ function phoneScroll() {
   if (Math.abs(d) > 14 || y < 30) lastSY = y;
 }
 main.addEventListener('scroll', phoneScroll, { passive: true });
-function fitH() { try { if (!document.body.classList.contains('phone')) { document.documentElement.style.removeProperty('--ah'); return; } const st = navigator.standalone || matchMedia('(display-mode: standalone)').matches; const h = st ? Math.max(innerHeight, screen.height || 0) : innerHeight; document.documentElement.style.setProperty('--ah', h + 'px'); } catch {} }
-fitH(); addEventListener('resize', fitH); addEventListener('orientationchange', () => setTimeout(fitH, 300));
+function fitH() { try { const st = navigator.standalone || matchMedia('(display-mode: standalone)').matches; const h = (st && isPhone()) ? Math.max(innerHeight, screen.height || 0) : innerHeight; document.documentElement.style.setProperty('--ah', h + 'px'); } catch {} }
+fitH(); addEventListener('resize', fitH); addEventListener('orientationchange', () => setTimeout(fitH, 300)); if (window.visualViewport) visualViewport.addEventListener('resize', fitH);
 function applyPhone() {
   fitH(); const p = isPhone(); document.body.classList.toggle('phone', p);
   if (p) { setSB(false); renderPhone(); rfSizes(); rfKick(600); }
 }
 addEventListener('resize', () => { applyPhone(); });
 function renderSidebar() {
+  const scTop = ($('#sidebar .sbscroll') || { scrollTop: 0 }).scrollTop;
   renderTop(); renderPhone();
   const ni = (r, icon, label, extra = '') => `<button class="ni${S.route === r ? ' on' : ''}" data-act="go" data-r="${r}">${ic(icon)}<span>${esc(label)}</span>${extra}</button>`;
   const grp = (id, label, body) => `<button class="sg${S.col[id] ? ' c' : ''}" data-act="col" data-id="${id}"><span>${label}</span>${ic('chevd')}</button><div class="sgc${S.col[id] ? ' c' : ''}"><div>${body}</div></div>`;
@@ -791,6 +810,7 @@ function renderSidebar() {
       ${grp('pls', t('playlists'), ni('playlists', 'grid9', t('allPl')) + ni('fav', 'favtile', t('fav')) + pl)}
       <div style="height:12px"></div></div>
     <div class="profrow"><button class="prof" data-act="account"><span class="avatar">${ic('person')}</span><span>${esc(uname || t('name'))}</span></button><button class="ib" data-act="settings" aria-label="Settings">${ic('sliders')}</button></div>`;
+  const scEl = $('#sidebar .sbscroll'); if (scEl) scEl.scrollTop = scTop;
 }
 
 /* ============ 画面: ホーム ============ */
@@ -850,12 +870,15 @@ function vSearch(el) {
   const seg = [['youtube', 'YouTube'], ['audius', 'Audius'], ['archive', 'Internet Archive'], ['commons', 'Wikimedia'], ['jamendo', 'Jamendo'], ['itunes', ja ? 'iTunes(30秒)' : 'iTunes (30s)'], ['lib', t('library')]];
   el.innerHTML = `<div class="sbar"><label class="glass sin">${ic('search')}<input id="q" type="search" placeholder="${t('searchPh')}" value="${esc(S.q)}" autocomplete="off" enterkeyhint="search"></label><button class="ib glass sxb" data-act="sclr" aria-label="Clear">${ic('xmark')}</button><div class="seg glass">${seg.map(([k, l]) => `<button class="${S.src === k ? 'on' : ''}" data-act="seg" data-s="${k}">${l}</button>`).join('')}</div></div><div class="pseg"><div class="seg2p glass"><button class="${S.src !== 'lib' ? 'on' : ''}" data-act="seg" data-s="${S.on || 'audius'}">${ja ? 'オンライン' : 'Online'}</button><button class="${S.src === 'lib' ? 'on' : ''}" data-act="seg" data-s="lib">${t('library')}</button></div>${S.src !== 'lib' ? `<div class="chips2">${seg.slice(0, 6).map(([k, l]) => `<button class="${S.src === k ? 'on' : ''}" data-act="seg" data-s="${k}">${l}</button>`).join('')}</div>` : ''}</div><div id="res"></div>`;
   $('#q', el).addEventListener('input', e => { S.q = e.target.value; clearTimeout(sTimer); sTimer = setTimeout(doSearch, 350); });
+  const qin = $('#q', el);
+  qin.addEventListener('change', () => rememberSearch(S.q));
+  qin.addEventListener('keydown', e => { if (e.key === 'Enter') rememberSearch(S.q); });
   doSearch();
 }
+function rememberSearch(q) { q = (q || '').trim(); if (q.length < 2) return; shist = [q, ...shist.filter(x => x !== q)].slice(0, 8); LS.set('shist', shist); }
 async function doSearch() {
   const res = $('#res'); if (!res || S.route !== 'search') return;
   const my = ++S.tok, q = S.q.trim(); S.lists = {}; S.lk = 0;
-  if (q.length > 1) { shist = [q, ...shist.filter(x => x !== q)].slice(0, 8); LS.set('shist', shist); }
   if (!q && S.src !== 'lib') { res.innerHTML = (shist.length ? `<div class="hhead"><h2>${ja ? '最近検索された項目' : 'Recent Searches'}</h2><button data-act="clrh">${t('clear')}</button></div><div class="tl hrows">${shist.map(h => `<div class="tr" data-act="cat" data-q="${esc(h)}"><span class="hico">${ic('search')}</span><div class="ti"><b>${esc(h)}</b><small>${ja ? '検索' : 'Search'}</small></div><button class="ib" data-act="rmh" data-q="${esc(h)}" aria-label="Remove">${ic('xmark')}</button></div>`).join('')}</div>` : '') + `<h2>${t('browse')}</h2><div class="cats">${catHTML()}</div>`; return; }
   if (S.src === 'lib') {
     const ql = q.toLowerCase(), l = [...lib.values()].filter(x => !ql || (x.title + ' ' + x.artist + ' ' + x.album).toLowerCase().includes(ql));
@@ -941,7 +964,7 @@ function listItems(l, name) {
 }
 async function vIArtist(el, name, tok) {
   el.innerHTML = head('', '', true) + spinner;
-  const lc = s => (s || '').toLowerCase(), m = x => lc(x.artist).includes(lc(name)) || lc(name).includes(lc(x.artist));
+  const lc = s => (s || '').toLowerCase(), m = x => !!x.artist && (lc(x.artist).includes(lc(name)) || lc(name).includes(lc(x.artist)));
   const [ar, au1, it1] = await Promise.all([itunes(`search?term=${encodeURIComponent(name)}&entity=musicArtist&limit=1`).catch(() => ({ results: [] })), auSearch(name, 25).catch(() => []), itSongs(name, 15).catch(() => [])]);
   if (tok !== S.tok) return;
   const a = ar.results[0]; let albums = [];
@@ -1006,6 +1029,17 @@ function plMenu(p) {
   return it;
 }
 
+async function addUrlFlow() {
+  const r = await ask(t('addUrl'), t('urlPh'), '', t('titlePh'));
+  if (!r || !/^https?:\/\//i.test(r[0])) return;
+  const [url, title] = r;
+  let name = (url.split('/').pop() || '').split('?')[0];
+  try { name = decodeURIComponent(name); } catch {}
+  let host = ''; try { host = new URL(url).hostname; } catch {}
+  await addToLib({ id: uid('ur'), title: title || name || url, artist: host, album: ja ? '外部URL' : 'Web', dur: 0, url, art: null, src: 'url' });
+  render();
+}
+
 /* ============ クリック処理 ============ */
 document.addEventListener('click', async e => {
   const a = e.target.closest('[data-act]'); if (!a) return;
@@ -1019,7 +1053,7 @@ document.addEventListener('click', async e => {
     case 'mode': S.mode = d.m; applyMode(); break;
     case 'tplay': playLib(false); break;
     case 'tshuf': playLib(true); break;
-    case 'tmore': menu(rect.right - 250, rect.bottom + 8, [{ label: t('upload'), icon: 'upload', act: () => $('#file').click() }, { label: t('addUrl'), icon: 'link', act: () => document.querySelector('[data-act=addurl]') ? document.querySelector('[data-act=addurl]').click() : (go('songs')) }, glassItem(), settingsItem(), '-', { label: ja ? 'サイドバーに切り替え' : 'Switch to Sidebar', icon: 'sidebar', act: () => { S.mode = 'sidebar'; applyMode(); } }]); break;
+    case 'tmore': menu(rect.right - 250, rect.bottom + 8, [{ label: t('upload'), icon: 'upload', act: () => $('#file').click() }, { label: t('addUrl'), icon: 'link', act: () => addUrlFlow() }, glassItem(), settingsItem(), '-', { label: ja ? 'サイドバーに切り替え' : 'Switch to Sidebar', icon: 'sidebar', act: () => { S.mode = 'sidebar'; applyMode(); } }]); break;
     case 'sidebar': setSB(!S.sb); break;
     case 'col': S.col[d.id] = !S.col[d.id]; saveAll(); renderSidebar(); break;
     case 'edit': S.edit = !S.edit; renderSidebar(); break;
@@ -1037,7 +1071,7 @@ document.addEventListener('click', async e => {
     case 'station': station(d.term); break;
     case 'jamkey': { const k = await ask('Jamendo client_id', 'client_id', jamKey()); if (k) { LS.set('jamendo', k); doSearch(); } break; }
     case 'upload': $('#file').click(); break;
-    case 'addurl': { const r = await ask(t('addUrl'), t('urlPh'), '', t('titlePh')); if (r && /^https?:\/\//i.test(r[0])) { const [url, title] = r; await addToLib({ id: uid('ur'), title: title || decodeURIComponent(url.split('/').pop().split('?')[0]) || url, artist: new URL(url).hostname, album: ja ? '外部URL' : 'Web', dur: 0, url, art: null, src: 'url' }); render(); } break; }
+    case 'addurl': addUrlFlow(); break;
     case 'plmenu': menu(rect.right - 250, rect.bottom + 8, [{ label: t('newPl'), icon: 'plnote', act: async () => { const n = await ask(t('newPl'), t('plName')); if (n) { playlists.push({ id: uid('pl'), name: n, songs: [] }); saveAll(); renderSidebar(); render(); } } }, { label: t('newFolder'), icon: 'folder', act: async () => { const n = await ask(t('newFolder'), t('fName')); if (n) { playlists.push({ id: uid('fo'), name: n, folder: true }); saveAll(); renderSidebar(); render(); } } }]); break;
     case 'pmore': { e.stopPropagation(); const p = playlists.find(x => x.id === d.id); if (p) menu(rect.left - 150, rect.bottom + 6, plMenu(p)); break; }
     case 'hmore': if (S.hmore) menu(rect.right - 250, rect.bottom + 8, S.hmore); break;
@@ -1053,7 +1087,6 @@ document.addEventListener('pointermove', e => {
   const r = g.getBoundingClientRect(); g.style.setProperty('--mx', ((e.clientX - r.left) / r.width * 100) + '%'); g.style.setProperty('--my', ((e.clientY - r.top) / r.height * 100) + '%'); g.classList.add('lit');
 });
 document.addEventListener('pointerout', e => { const g = e.target.closest && e.target.closest('.glass'); if (g && !g.contains(e.relatedTarget)) g.classList.remove('lit'); });
-document.addEventListener('keydown', e => { if (e.target.tagName === 'INPUT') return; if (e.code === 'Space') { e.preventDefault(); toggle(); } else if (e.code === 'ArrowRight') next(); else if (e.code === 'ArrowLeft') prev(); });
 $('#sbopen').innerHTML = ic('sidebar');
 
 /* ============ 上部タブバー + Liquid Glassレンズ(スプリング物理) ============ */
@@ -1204,6 +1237,7 @@ function applyAppearance(mode) {
     }
   }
   document.documentElement.style.colorScheme = mode === 'auto' ? '' : mode;
+  document.documentElement.classList.toggle('lt', !(mode === 'dark' || (mode === 'auto' && matchMedia('(prefers-color-scheme: dark)').matches)));
 }
 function applySettings(rebuild) {
   const root = document.documentElement.style;
@@ -1244,7 +1278,7 @@ function openAccount() {
     if (a === 'profile') { close(); openSettings('profile'); }
     else if (a === 'settings') { close(); openSettings(); }
     else if (a === 'upload') { $('#file').click(); }
-    else if (a === 'url') { close(); const r = await ask(t('addUrl'), t('urlPh'), '', t('titlePh')); if (r && /^https?:\/\//i.test(r[0])) { const [url, title] = r; await addToLib({ id: uid('ur'), title: title || decodeURIComponent(url.split('/').pop().split('?')[0]) || url, artist: new URL(url).hostname, album: ja ? '外部URL' : 'Web', dur: 0, url, art: null, src: 'url' }); render(); } }
+    else if (a === 'url') { close(); addUrlFlow(); }
     else if (a === 'share') doShare('Music', ja ? '音楽プレイヤーPWA' : 'Music PWA', location.href.split('#')[0]);
     else if (a === 'hist') { close(); go('top'); }
     else if (a === 'top') { close(); go('top'); }
@@ -1327,8 +1361,8 @@ function openSettings(start) {
     }
     const d = t0.closest('[data-do]'); if (!d) return; const [a, v] = d.dataset.do.split(':');
     if (a === 'rate') { const r = +v; au.defaultPlaybackRate = r; au.playbackRate = r; au.preservesPitch = true; }
-    else if (a === 'sleep') { if (v === 'end') { S.sleepEnd = true; toast(ja ? 'この曲の終わりで停止' : 'Stops at end of track'); } else setSleep(+v * 60); }
-    else if (a === 'src') { S.src = v; LS.set('src', v); }
+    else if (a === 'sleep') { if (v === 'end') { clearTimeout(sleepT); S.sleepEnd = true; toast(ja ? 'この曲の終わりで停止' : 'Stops at end of track'); } else setSleep(+v * 60); }
+    else if (a === 'src') { S.src = v; LS.set('src', v); if (v !== 'lib') S.on = v; }
     else if (a === 'ytkey') { const k = await ask('YouTube Data API v3', ja ? 'APIキー(AIza…)' : 'API key (AIza…)', ytKey()); if (k) LS.set('ytkey', k.trim()); }
     else if (a === 'ytclr') { LS.set('ytkey', ''); toast(ja ? '削除しました' : 'Removed'); }
     else if (a === 'jam') { const k = await ask('Jamendo client_id', 'client_id', jamKey()); if (k) LS.set('jamendo', k); }
@@ -1370,19 +1404,19 @@ function lyCands(tr) {
 async function fetchLyrics(tr) {
   if (lyc.has(tr.id)) return lyc.get(tr.id);
   const yt = tr.src === 'youtube', J = async u => { try { const r = await fetch(u); return r.ok ? await r.json() : null; } catch { return null; } };
-  const pick = (arr, d) => { arr = (arr || []).filter(x => x && (x.syncedLyrics || x.plainLyrics)); if (!arr.length) return null; if (d) arr.sort((p, q) => Math.abs((p.duration || 0) - d) - Math.abs((q.duration || 0) - d)); const s = arr.filter(x => x.syncedLyrics); return s[0] || arr[0]; };
+  const pick = (arr, d) => { arr = (arr || []).filter(x => x && (x.syncedLyrics || x.plainLyrics) && (!d || !x.duration || Math.abs(x.duration - d) <= Math.max(6, d * 0.03))); if (!arr.length) return null; if (d) arr.sort((p, q) => Math.abs((p.duration || 0) - d) - Math.abs((q.duration || 0) - d)); const s = arr.filter(x => x.syncedLyrics); return s[0] || arr[0]; };
   let res = null;
   const base = [[tr.title, tr.artist]]; const cands = yt ? lyCands(tr) : base;
   for (const [t, ar] of cands) {
     const q = `track_name=${encodeURIComponent(t)}${ar ? '&artist_name=' + encodeURIComponent(ar) : ''}`;
     if (!yt) {
       let r = await J(`https://lrclib.net/api/get?${q}${tr.album ? '&album_name=' + encodeURIComponent(tr.album) : ''}${tr.dur && tr.src !== 'itunes' ? '&duration=' + Math.round(tr.dur) : ''}`);
-      if (r && (r.syncedLyrics || r.plainLyrics)) { res = r; break; }
+      if (r && (r.syncedLyrics || r.plainLyrics) && (!tr.dur || !r.duration || Math.abs(r.duration - tr.dur) <= Math.max(6, tr.dur * 0.03))) { res = r; break; }
     }
-    res = pick(await J(`https://lrclib.net/api/search?${q}`), yt ? tr.dur : 0); if (res) break;
-    res = pick(await J(`https://lrclib.net/api/search?q=${encodeURIComponent((ar ? ar + ' ' : '') + t)}`), yt ? tr.dur : 0); if (res) break;
+    res = pick(await J(`https://lrclib.net/api/search?${q}`), tr.dur); if (res) break;
+    res = pick(await J(`https://lrclib.net/api/search?q=${encodeURIComponent((ar ? ar + ' ' : '') + t)}`), tr.dur); if (res) break;
   }
-  const out = res ? { synced: parseLrc(res.syncedLyrics), plain: res.plainLyrics || '' } : null;
+  const out = res ? (() => { let sy = parseLrc(res.syncedLyrics); if (sy && tr.dur && sy[sy.length - 1].t > tr.dur + 10) sy = null; return { synced: sy, plain: res.plainLyrics || '' }; })() : null;
   lyc.set(tr.id, out); return out;
 }
 /* 歌詞: 間奏ドット / 手動スクロール中は自動追従を一時停止 */
@@ -1396,11 +1430,13 @@ function lyBuild() {
   const p = $('.nppanel', np);
   if (!p._ly) { p._ly = 1; ['touchstart', 'wheel', 'pointerdown'].forEach(ev => p.addEventListener(ev, () => { lyUser = Date.now(); }, { passive: true })); }
 }
+const lyOff = tr => tr ? +((LS.get('lyoff', {}))[tr.id] || 0) : 0;
+function lyoffShow(tr) { const v = lyOff(tr), el = $('#lyoffv'); if (el) el.textContent = (v > 0 ? '+' : '') + v.toFixed(1) + 's'; }
 function lyricSync(force) {
   if (!lyLines || !np.classList.contains('mode-lyrics')) return;
   const dots = $$('.lyl.lyd.on', np);
   if (dots.length) { const c = au.currentTime, d = dots[0], s = +d.dataset.t || 0, e = +d.dataset.e || s + 6; d.style.setProperty('--g', Math.max(0, Math.min(1, (c - s) / Math.max(1, e - s - .6)))); }
-  const c = au.currentTime + .25; let i = -1;
+  const c = au.currentTime + .25 + lyOff(cur()); let i = -1;
   for (let k = 0; k < lyLines.length; k++) { if (lyLines[k].t <= c) i = k; else break; }
   if (i === lyIdx && !force) return; lyIdx = i;
   const panel = $('.nppanel', np), rows = $$('.lyl', panel);
@@ -1446,7 +1482,7 @@ function xfTick() {
 const RATES = [.75, 1, 1.25, 1.5, 2];
 const speedItem = () => ({ label: (ja ? '再生速度: ' : 'Speed: ') + au.playbackRate + '×', icon: 'clock', sub: RATES.map(r => ({ label: r + '×' + (au.playbackRate === r ? ' ✓' : ''), icon: 'play', act: () => { au.defaultPlaybackRate = r; au.playbackRate = r; au.preservesPitch = true; toast((ja ? '再生速度 ' : 'Speed ') + r + '×'); } })) });
 let sleepT = 0;
-function fadePause() { const v = au.volume; let i = 0; const iv = setInterval(() => { i++; au.volume = Math.max(0, v * (1 - i / 30)); if (i >= 30) { clearInterval(iv); au.pause(); au.volume = v; } }, 100); }
+function fadePause() { const v = au.volume; let i = 0; const iv = setInterval(() => { i++; au.volume = Math.max(0, v * (1 - i / 30)); if (i >= 30) { clearInterval(iv); wantPlay = false; au.pause(); au.volume = v; } }, 100); }
 function setSleep(sec) { clearTimeout(sleepT); S.sleepEnd = false; if (!sec) return toast(ja ? 'スリープタイマー オフ' : 'Sleep timer off'); toast((ja ? 'スリープタイマー ' : 'Sleep timer ') + Math.round(sec / 60) + (ja ? '分' : ' min')); sleepT = setTimeout(fadePause, sec * 1000); }
 const sleepItem = () => ({ label: ja ? 'スリープタイマー' : 'Sleep Timer', icon: 'clock', sub: [15, 30, 45, 60].map(m => ({ label: m + (ja ? '分' : ' min'), icon: 'clock', act: () => setSleep(m * 60) })).concat([{ label: ja ? 'この曲の終わりまで' : 'End of Track', icon: 'clock', act: () => { clearTimeout(sleepT); S.sleepEnd = true; toast(ja ? 'この曲の後に停止します' : 'Will stop after this track'); } }, { label: ja ? 'オフ' : 'Off', icon: 'xmark', act: () => setSleep(0) }]) });
 
@@ -1490,7 +1526,7 @@ function rfFilter(r) {
 function rfSizes() {
   RF.forEach(r => {
     const w = r.el.offsetWidth, h = r.el.offsetHeight; if (!w || !h || (w === r.w && h === r.h)) return;
-    r.w = w; r.h = h; r.B = Math.min(h * .4, 24); r.rfm.style.setProperty('--rfw', Math.max(8, Math.round(r.B * .5)) + 'px'); r.k = 1.6 * ST.refr; try { const nid = rfFilter(r); r.rfm.style.filter = r.rfm.style.webkitFilter = `url(#${nid})`; if (r.cur) { const o = document.getElementById(r.cur); if (o) o.remove(); } r.cur = nid; } catch {}
+    r.w = w; r.h = h; r.B = Math.min(h * .4, 24); r.rfm.style.setProperty('--rfw', Math.max(4, Math.round(r.B * .28)) + 'px'); r.k = 1.6 * ST.refr; try { const nid = rfFilter(r); r.rfm.style.filter = r.rfm.style.webkitFilter = `url(#${nid})`; if (r.cur) { const o = document.getElementById(r.cur); if (o) o.remove(); } r.cur = nid; } catch {}
   });
 }
 function rfClone() {
@@ -1535,6 +1571,7 @@ function rfInit() {
 /* ============ 起動 ============ */
 (async function init() {
   applySettings(); applyExtra();
+  matchMedia('(prefers-color-scheme: dark)').addEventListener?.('change', () => applyAppearance(ST.ap));
   ['top', 'bot'].forEach(k => { const d = document.createElement('div'); d.className = 'edge ' + k; $('#app').insertBefore(d, $('#mini')); });
   setSB(S.sb);
   buildTop(); applyMode(true); applyPhone(); rfInit();

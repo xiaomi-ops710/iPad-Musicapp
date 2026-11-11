@@ -72,7 +72,7 @@ body.sb #sbopen{opacity:0;pointer-events:none;transform:scale(.5)}
 @media(min-width:1001px){body.sb{--ml:var(--sbw)}}
 #main{position:absolute;inset:0;left:var(--ml);overflow:auto;-webkit-overflow-scrolling:touch;padding:calc(10px + var(--sat)) 28px 150px;transition:left .55s var(--ease);scrollbar-width:none}
 #main::-webkit-scrollbar{display:none}
-.page{animation:rise .5s var(--ease) both;max-width:1280px;margin:0 auto}
+.page{animation:rise .5s var(--ease) backwards;max-width:1280px;margin:0 auto}
 @keyframes rise{from{opacity:0;transform:translateY(14px) scale(.995)}to{opacity:1;transform:none}}
 body:not(.sb) #main{padding-top:calc(64px + var(--sat))}
 .ph{display:flex;align-items:center;justify-content:space-between;margin:14px 0 12px;min-height:50px}
@@ -259,7 +259,7 @@ body.dragover #drop{display:grid}
 @media(prefers-reduced-motion:reduce){*{animation-duration:.01ms!important;transition-duration:.01ms!important}}
 
 /* ===== 上部タブバー / ガラスレンズ ===== */
-#topbar{position:absolute;z-index:22;left:0;right:0;top:calc(10px + var(--sat));display:flex;justify-content:center;align-items:center;pointer-events:none;
+#topbar{position:absolute;z-index:22;left:0;right:0;top:calc(22px + var(--sat));display:flex;justify-content:center;align-items:center;pointer-events:none;
   transform:translateY(-150%) scale(.88);opacity:0;transition:transform .75s var(--spring),opacity .35s}
 body.tabs #topbar{transform:none;opacity:1}
 #topbar>*{pointer-events:auto}
@@ -828,24 +828,24 @@ body.phone #np.mode-lyrics .nptitle .ib::before,body.phone #np.mode-queue .nptit
 @keyframes pop{0%{opacity:0;transform:translateY(18px) scale(.94)}100%{opacity:1;transform:none}}
 @keyframes fadeup{0%{opacity:0;transform:translateY(10px)}100%{opacity:1;transform:none}}
 @keyframes slidein{0%{opacity:0;transform:translateX(26px)}100%{opacity:1;transform:none}}
-.hs>*{animation:pop .65s var(--spring) both}
+.hs>*{animation:pop .65s var(--spring) backwards}
 .hs>*:nth-child(2){animation-delay:.05s}.hs>*:nth-child(3){animation-delay:.1s}.hs>*:nth-child(4){animation-delay:.15s}.hs>*:nth-child(5){animation-delay:.2s}.hs>*:nth-child(n+6){animation-delay:.25s}
-.tl>.tr{animation:fadeup .45s var(--ease) both}
+.tl>.tr{animation:fadeup .45s var(--ease) backwards}
 .tl>.tr:nth-child(2){animation-delay:.03s}.tl>.tr:nth-child(3){animation-delay:.06s}.tl>.tr:nth-child(4){animation-delay:.09s}.tl>.tr:nth-child(5){animation-delay:.12s}.tl>.tr:nth-child(6){animation-delay:.15s}.tl>.tr:nth-child(n+7){animation-delay:.18s}
 .hs>*,.tl .tr{transition:transform .35s var(--spring),background .2s}
 .hs>*:active{transform:scale(.95)}.tl .tr:active{transform:scale(.98)}
-#menu.show button,#menu.show .mrow{animation:fadeup .4s var(--spring) both}
+#menu.show button,#menu.show .mrow{animation:fadeup .4s var(--spring) backwards}
 #menu.show>*:nth-child(2){animation-delay:.03s}#menu.show>*:nth-child(3){animation-delay:.06s}#menu.show>*:nth-child(4){animation-delay:.09s}#menu.show>*:nth-child(5){animation-delay:.12s}#menu.show>*:nth-child(n+6){animation-delay:.15s}
-#np.open .nptitle,#np.open .times,#np.open .npbtns,#np.open .vol,#np.open .npfoot{animation:fadeup .6s var(--spring) both}
+#np.open .nptitle,#np.open .times,#np.open .npbtns,#np.open .vol,#np.open .npfoot{animation:fadeup .6s var(--spring) backwards}
 #np.open .times{animation-delay:.05s}#np.open .npbtns{animation-delay:.1s}#np.open .vol{animation-delay:.15s}#np.open .npfoot{animation-delay:.2s}
 .npbtns .ib,.npfoot button,.npmodes button{transition:transform .35s var(--spring),background .3s,color .3s,opacity .3s}
 .npbtns .ib:active{transform:scale(.82)}
 .ib:active{transform:scale(.88)}
-.srb>*{animation:fadeup .45s var(--ease) both}
-#settings.det .srb{animation:slidein .5s var(--ease) both}
+.srb>*{animation:fadeup .45s var(--ease) backwards}
+#settings.det .srb{animation:slidein .5s var(--ease) backwards}
 body.phone .pt button.on .ic{animation:tabpop .55s var(--spring)}
 @keyframes tabpop{0%{transform:scale(.7)}60%{transform:scale(1.18)}100%{transform:scale(1)}}
-#mini{animation:pop .6s var(--spring) both}
+#mini{animation:pop .6s var(--spring) backwards}
 .lyl{transition:opacity .5s,filter .5s,transform .6s var(--spring)}
 @media(prefers-reduced-motion:reduce){*{animation:none!important}}
 
@@ -925,3 +925,45 @@ body.phone .pt button.on .ic{animation:tabpop .55s var(--spring)}
 #mini .mt small{font-size:14px;color:var(--fg2)}
 #mini [data-m=more],#mini [data-m=lyrics],#mini [data-m=queue]{font-size:21px}
 #mini .prog{display:none}
+
+
+/* ===== v43: Liquid Glass 質感の作り直し / 余白ゼロ / 歌詞の補正UI ===== */
+/* 色はここで一元管理。ダーク(既定)・ライト(html.lt、アプリ設定/OS設定に追従)。 */
+:root{--gm:rgba(255,255,255,.07);--gmrim:rgba(255,255,255,.42);--gmsh:rgba(255,255,255,.24);--gmsel:rgba(255,255,255,.13);--gmsd:0 12px 32px rgba(0,0,0,.30)}
+html.lt{--gm:rgba(255,255,255,.30);--gmrim:rgba(255,255,255,.95);--gmsh:rgba(255,255,255,.9);--gmsel:rgba(0,0,0,.06);--gmsd:0 10px 28px rgba(0,0,0,.14)}
+
+/* 画面の高さを実ビューポートに固定し、下に余白ができないようにする */
+html,body{height:100vh;height:var(--ah,100dvh);background:var(--bg)}
+#app{height:100vh;height:var(--ah,100dvh);background:var(--bg)}
+body.tabs #main{padding-top:calc(100px + var(--sat))}
+
+/* ガラス本体: 透明度を上げ、縁に光の筋(屈折の縁)を残す */
+.tbar.glass,#mini,.tright .ib.glass,body.phone .pt,body.phone .ps,body.phone #mini{
+  background:var(--gm)!important;
+  -webkit-backdrop-filter:blur(22px) saturate(175%) brightness(1.06)!important;
+  backdrop-filter:blur(22px) saturate(175%) brightness(1.06)!important;
+  box-shadow:inset 0 0 0 .6px var(--gmrim),inset 0 1.5px 0 var(--gmsh),inset 0 -1.5px 2px rgba(0,0,0,.10),var(--gmsd)!important}
+
+/* 選択中のピル: 暗い塗りをやめ、半透明+縁の光 */
+.tbpill,.lensc .tbpill,.ptsel,body.phone .ptsel,body.phone .pt .ptsel{
+  background:var(--gmsel)!important;
+  box-shadow:inset 0 0 0 .6px var(--gmrim),inset 0 1px 0 var(--gmsh)!important}
+
+/* レンズ: 中身は透明にし、縁だけ光らせる(黒い縁影と二重の輪郭を消す) */
+.tblens{background:transparent!important;box-shadow:0 10px 24px rgba(0,0,0,.22)!important}
+html.lt .tblens{box-shadow:0 10px 22px rgba(0,0,0,.12)!important}
+.tblens::after{box-shadow:
+  inset 0 0 0 .8px var(--gmrim),
+  inset 0 1.5px 0 var(--gmsh),
+  inset 0 -1.5px 2px rgba(0,0,0,.12),
+  inset 2px 0 3px -2px rgba(255,90,140,calc(.22 + var(--st,0) * 1.2)),
+  inset -2px 0 3px -2px rgba(90,170,255,calc(.26 + var(--st,0) * 1.2))!important}
+.lspec{background:linear-gradient(90deg,transparent,rgba(255,255,255,.55),transparent)}
+
+/* 歌詞の時間補正(±0.5秒、曲ごとに保存) */
+.lyoff{position:absolute;right:18px;top:calc(96px + var(--sat));z-index:4;display:none;align-items:center;gap:6px;padding:5px;border-radius:99px;
+  background:rgba(255,255,255,.14);-webkit-backdrop-filter:blur(18px);backdrop-filter:blur(18px);box-shadow:inset 0 0 0 .6px rgba(255,255,255,.4)}
+.lyoff button{height:34px;padding:0 12px;border-radius:99px;font-size:14px;font-weight:600;color:#fff;background:rgba(255,255,255,.16)}
+.lyoff button:active{transform:scale(.94)}
+.lyoff span{min-width:58px;text-align:center;font-size:14px;font-weight:600;color:#fff;font-variant-numeric:tabular-nums}
+#np.mode-lyrics.lyon .lyoff{display:flex}
