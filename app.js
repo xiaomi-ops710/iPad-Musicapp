@@ -1,4 +1,5 @@
 'use strict';
+const APP_VERSION = 'v50'; // 更新するたびに上げる(sw.js の CACHE と揃える)
 /* ============ ユーティリティ ============ */
 const DLOG = [];
 const dlog = (lv, ...a) => {
@@ -833,7 +834,7 @@ function phoneScroll() {
   if (Math.abs(d) > 14 || y < 30) lastSY = y;
 }
 main.addEventListener('scroll', phoneScroll, { passive: true });
-function fitH() { try { const st = navigator.standalone || matchMedia('(display-mode: standalone)').matches; const h = (st && isPhone()) ? Math.max(innerHeight, screen.height || 0) : innerHeight; document.documentElement.style.setProperty('--ah', h + 'px'); } catch {} }
+function fitH() { return; /* v50: 高さは CSS(inset:0 / height:100%) に任せる */ }
 fitH(); addEventListener('resize', fitH); addEventListener('orientationchange', () => setTimeout(fitH, 300)); if (window.visualViewport) visualViewport.addEventListener('resize', fitH);
 function applyPhone() {
   fitH(); const p = isPhone(); document.body.classList.toggle('phone', p);
@@ -1389,19 +1390,31 @@ function openSettings(start) {
     sources: () => grp(ja ? '検索の既定ソース' : 'Default Search Source', [['youtube', 'YouTube', ja ? '優先・動画から再生' : 'Preferred'], ['audius', 'Audius', ja ? 'フル再生・無料' : 'Full tracks'], ['archive', 'Internet Archive', ja ? 'フル再生' : 'Full tracks'], ['commons', 'Wikimedia Commons', ja ? 'フル再生' : 'Full tracks'], ['jamendo', 'Jamendo', 'client_id'], ['itunes', 'iTunes', ja ? '30秒プレビュー' : '30s previews'], ['lib', t('library'), '']].map(([k, n, d]) => `<div class="srw act" data-do="src:${k}"><span>${n}${d ? `<small> ${d}</small>` : ''}</span>${S.src === k ? `<b class="ckm">${ic('check')}</b>` : ''}</div>`).join(''))
       + grp('YouTube Data API v3', `<div class="srw act" data-do="ytkey"><span>${ja ? 'APIキー' : 'API Key'}</span><em>${ytKey() ? '••••' + ytKey().slice(-4) : (ja ? '未設定' : 'Not set')}</em><b>${ic('chevr')}</b></div>` + (ytKey() ? btn(ja ? 'APIキーを削除' : 'Remove API Key', 'ytclr', 1) : ''), ja ? 'キーを入力すると、YouTubeの検索はAPIを優先して使います(失敗時は公開サーバーに自動で切り替え)。未入力の場合は従来どおり公開サーバーで検索します。音声の再生は、どちらの場合も公開サーバー経由です。キーはこの端末にのみ保存されます。' : 'With a key, YouTube search uses the API first and falls back to public servers. Playback always goes through public servers. The key stays on this device.')
       + grp('Jamendo', `<div class="srw act" data-do="jam"><span>client_id</span><em>${jamKey() ? (ja ? '設定済み' : 'Set') : (ja ? '未設定' : 'Not set')}</em><b>${ic('chevr')}</b></div>`, ja ? 'developer.jamendo.com で無料のclient_idを取得できます。' : 'Get a free client_id at developer.jamendo.com.'),
-    appearance: () => grp('', `<div class="apr">${['light', 'dark'].map(k => { const on = ST.ap === 'auto' ? (effDark() === (k === 'dark')) : ST.ap === k;
-        return `<button data-ap="${k}" class="apo"><div class="pv ${k}"><span>9:41</span><i></i><i></i></div><div>${k === 'light' ? (ja ? 'ライト' : 'Light') : (ja ? 'ダーク' : 'Dark')}</div><div class="rd${on ? ' on' : ''}">${on ? ic('check') : ''}</div></button>`; }).join('')}</div>${trow(ja ? '自動' : 'Automatic', 'auto2', ST.ap === 'auto')}`, ja ? '“自動” では、端末の設定に合わせてライトとダークが切り替わります。' : 'Automatic follows your device setting.')
-      + grp(ja ? 'アクセントカラー' : 'Accent Color', `<div class="swp">${ACCS.map(c => `<button data-acc="${c}" style="background:${c}" class="${ST.acc === c ? 'on' : ''}" aria-label="${c}"></button>`).join('')}</div>`),
-    glass: () => `<div class="lgpv"><div class="lgim"><div class="lgbar"><lg-panel class="lgs"><span class="lgsi">${ic('search')}<small>${ja ? '検索' : 'Search'}</small></span></lg-panel><lg-button class="lgc" aria-label="${ja ? '並び替え' : 'Sort'}">${ic('sort')}</lg-button></div></div><div class="lgtx"><h3>${ja ? 'ようこそ Apple Park へ' : 'Welcome to Apple Park'}</h3><h4>${ja ? 'カリフォルニア州クパティーノ' : 'Cupertino, California'}</h4><p>${ja ? 'この場所ならではの自然の魅力や美しさを発見しましょう。' : 'Discover the natural beauty of this place.'}</p></div></div>`
-      + `<div class="sgp lgsl"><span class="lgi">${ic('stack')}</span><lg-slider data-k="lg" min="0" max="1" step="0.01" value="${ST.lg}"></lg-slider><span class="lgi f">${ic('stack')}</span></div><p class="sft">${ja ? '“クリア” を選択すると透明度が高くなり、“色合い調整” を選択すると不透明度が上がってコンテンツやコントロールのコントラストが強くなります。' : 'Clear is more transparent. Tinted is more opaque for stronger contrast.'}</p>`
-      + grp(ja ? '屈折' : 'Refraction', trow(ja ? '背景の屈折効果' : 'Edge Refraction', 'glass', glassOn()) + `<div class="srw srs"><span>${ja ? '屈折の強さ' : 'Strength'}</span><lg-slider data-k="refr" min="0" max="2" step="0.05" value="${ST.refr}"></lg-slider></div><div class="srw srs"><span>${ja ? 'ぼかし' : 'Blur'}</span><lg-slider data-k="blur" min="0" max="6" step="0.1" value="${ST.blur}"></lg-slider></div>`),
+    appearance: () => {
+      const lnk = (l, v, a) => `<div class="srw act" data-do="${a}"><span>${l}</span>${v ? `<em>${v}</em>` : ''}<b>${ic('chevr')}</b></div>`;
+      const apo = k => { const on = ST.ap === 'auto' ? (effDark() === (k === 'dark')) : ST.ap === k; return `<button type="button" data-ap="${k}" class="apo"><span class="pv ${k}"><b>9:41</b><i></i><i></i></span><span class="apl">${k === 'light' ? (ja ? 'ライト' : 'Light') : (ja ? 'ダーク' : 'Dark')}</span><span class="rd${on ? ' on' : ''}">${on ? ic('check') : ''}</span></button>`; };
+      const lgv = ST.blur <= 2.5 ? (ja ? 'よりクリア' : 'Clear') : (ja ? '色合い調整' : 'Tinted');
+      return `<div class="sgh">${ja ? '外観モード' : 'Appearance'}</div>`
+        + `<div class="sgp apc"><div class="apr">${apo('light')}${apo('dark')}</div>${trow(ja ? '自動' : 'Automatic', 'auto2', ST.ap === 'auto')}</div>`
+        + `<p class="sft">${ja ? '“自動” では、日の出または日の入に基づいてライトとダークが切り替わります。' : 'Automatic switches between light and dark based on sunrise and sunset.'}</p>`
+        + `<div class="sgp">${lnk('Liquid Glass', lgv, 'go:glass')}</div>`
+        + `<p class="sft">${ja ? 'Liquid Glass は、背後のコンテンツに合わせてダイナミックに変化します。' : 'Liquid Glass changes dynamically with the content behind it.'}</p>`
+        + `<div class="sgp">${lnk(ja ? 'テキストサイズを変更' : 'Change Text Size', '', 'go:display')}${trow(ja ? '文字を太くする' : 'Bold Text', 'bold', ST.bold)}</div>`
+        + `<div class="sgh">${ja ? 'アクセシビリティオプション' : 'Accessibility Options'}</div>`
+        + `<div class="sgp">${trow(ja ? '視差効果を減らす' : 'Reduce Parallax', 'rp', ST.rp)}</div>`
+        + `<p class="sft"><button type="button" class="lnkb" data-do="go:access">${ja ? '“アクセシビリティ” でさらに表示…' : 'More in Accessibility…'}</button></p>`
+        + grp(ja ? 'アクセントカラー' : 'Accent Color', `<div class="swp">${ACCS.map(c => `<button data-acc="${c}" style="background:${c}" class="${ST.acc === c ? 'on' : ''}" aria-label="${c}"></button>`).join('')}</div>`);
+    },
+    glass: () => `<div class="lgpv"><div class="lgim"><div class="lgbar"><lg-button class="lgc" aria-label="${ja ? '並び替え' : 'Sort'}">${ic('sort')}</lg-button><lg-panel class="lgs"><span class="lgsi">${ic('search')}<small>${ja ? '検索' : 'Search'}</small></span></lg-panel></div></div><div class="lgtx"><h3>${ja ? 'ようこそ Apple Park へ' : 'Welcome to Apple Park'}</h3><p>${ja ? 'カリフォルニア州クパティーノ' : 'Cupertino, California'}</p></div></div>`
+      + `<div class="sgp lgsl">${ic('glclear')}<lg-slider data-k="blur" min="0" max="8" step="0.1" value="${ST.blur}"></lg-slider>${ic('glfill')}</div>`
+      + `<p class="sft">${ja ? '“クリア” を選択すると透明度が高くなり、“色合い調整” を選択すると不透明度が上がってコンテンツやコントロールのコントラストが強くなります。' : 'Clear makes the glass more transparent; Tinted adds opacity and raises contrast for content and controls.'}</p>`,
     display: () => grp(ja ? 'テキストサイズ' : 'Text Size', `<div class="srw srs"><small style="font-size:14px">A</small><lg-slider data-k="fs" min="0.85" max="1.3" step="0.05" value="${ST.fs || 1}"></lg-slider><small style="font-size:24px">A</small></div>`, ja ? 'アプリ全体の文字の大きさを調整します。' : 'Adjusts text size across the app.') + grp('', trow(ja ? '文字を太くする' : 'Bold Text', 'bold', ST.bold)),
-    access: () => grp(ja ? '視覚' : 'Vision', trow(ja ? '視差効果を減らす' : 'Reduce Parallax', 'rp', ST.rp) + trow(ja ? 'モーションを減らす' : 'Reduce Motion', 'rm', ST.rm) + trow(ja ? '透明度を下げる(屈折オフ)' : 'Reduce Transparency', 'glassoff', !glassOn()), ja ? '“モーションを減らす” はアニメーションを最小限にします。' : 'Reduce Motion minimizes animations.'),
+    access: () => grp('Liquid Glass', trow(ja ? '背景の屈折効果' : 'Edge Refraction', 'glass', glassOn()) + `<div class="srw srs"><span>${ja ? '屈折の強さ' : 'Strength'}</span><lg-slider data-k="refr" min="0" max="2" step="0.05" value="${ST.refr}"></lg-slider></div><div class="srw srs"><span>${ja ? '色合い' : 'Tint'}</span><lg-slider data-k="lg" min="0" max="1" step="0.01" value="${ST.lg}"></lg-slider></div>`, ja ? 'ガラス効果の屈折の強さと色合いを調整します。' : 'Adjust the refraction strength and tint of the glass effect.') + grp(ja ? '視覚' : 'Vision', trow(ja ? '視差効果を減らす' : 'Reduce Parallax', 'rp', ST.rp) + trow(ja ? 'モーションを減らす' : 'Reduce Motion', 'rm', ST.rm) + trow(ja ? '透明度を下げる(屈折オフ)' : 'Reduce Transparency', 'glassoff', !glassOn()), ja ? '“モーションを減らす” はアニメーションを最小限にします。' : 'Reduce Motion minimizes animations.'),
     library: () => grp(ja ? 'ライブラリ' : 'Library', row(ja ? '曲' : 'Songs', String(allSongs().length)) + row(ja ? 'お気に入り' : 'Favorites', String(favs.size)) + row(ja ? 'プレイリスト' : 'Playlists', String(playlists.length)) + row(ja ? '再生履歴' : 'History', String(recent.length)))
       + grp(ja ? 'データ' : 'Data', btn(ja ? '再生履歴を消去' : 'Clear Play History', 'clrrecent', 1) + btn(ja ? '再生回数をリセット' : 'Reset Play Counts', 'clrcnt', 1) + btn(ja ? '検索履歴を消去' : 'Clear Search History', 'clrhist', 1) + btn(ja ? 'キャッシュを消去' : 'Clear Cache', 'clrcache', 1))
       + grp(ja ? 'バックアップ' : 'Backup', btn(ja ? 'プレイリストと設定を書き出す' : 'Export Playlists & Settings', 'bkexp') + btn(ja ? 'バックアップを読み込む' : 'Import Backup', 'bkimp'), ja ? '曲のファイル本体は含まれません。プレイリスト、お気に入り、履歴、設定が対象です。' : 'Audio files are not included.'),
     log: () => grp('', `<div class="logbox" id="logbox">${DLOG.length ? esc(DLOG.slice().reverse().join('\n')) : (ja ? 'ログはまだありません' : 'No logs yet')}</div>`, ja ? '再生できないときの原因(エラーコード・接続先)が記録されます。コピーして共有できます。' : 'Records why playback failed.') + grp('', btn(ja ? 'ログをコピー' : 'Copy Logs', 'logcopy') + btn(ja ? 'ログを消去' : 'Clear Logs', 'logclr', 1)),
-    about: () => `<div class="sgp aboutc"><div class="aico">${ic('note')}</div><b>Music</b><small>iPadOS Music PWA · v47</small></div>` + grp('', row(ja ? '表示モード' : 'Display Mode', matchMedia('(display-mode: standalone)').matches ? 'PWA' : 'Browser') + row(ja ? '言語' : 'Language', ja ? '日本語' : 'English') + row(ja ? 'ガラス効果' : 'Glass', glassOn() ? (ja ? 'オン' : 'On') : (ja ? 'オフ' : 'Off'))) + `<p class="sft">${ja ? '音楽は Audius / Internet Archive / Wikimedia Commons / Jamendo / iTunes から取得します。' : 'Music comes from Audius, Internet Archive, Wikimedia Commons, Jamendo and iTunes.'}</p>`,
+    about: () => `<div class="sgp aboutc"><div class="aico">${ic('note')}</div><b>Music</b><small>iPadOS Music PWA · ${APP_VERSION}</small></div>` + grp('', row(ja ? '表示モード' : 'Display Mode', matchMedia('(display-mode: standalone)').matches ? 'PWA' : 'Browser') + row(ja ? '言語' : 'Language', ja ? '日本語' : 'English') + row(ja ? 'ガラス効果' : 'Glass', glassOn() ? (ja ? 'オン' : 'On') : (ja ? 'オフ' : 'Off'))) + `<p class="sft">${ja ? '音楽は Audius / Internet Archive / Wikimedia Commons / Jamendo / iTunes から取得します。' : 'Music comes from Audius, Internet Archive, Wikimedia Commons, Jamendo and iTunes.'}</p>`,
   };
   const title = id => id === 'profile' ? (ja ? 'プロフィール' : 'Profile') : L(SECS.flat().find(s => s[0] === id)[3]);
   const DESC = {
@@ -1425,7 +1438,7 @@ function openSettings(start) {
     const sc = keep ? $('.srb', el)?.scrollTop : 0;
     el.className = (el.classList.contains('show') ? 'show ' : '') + (det ? 'det' : '');
     el.innerHTML = `<div class="sw"><aside class="sl"><div class="slh"><lg-panel class="sfieldp"><label class="sfield">${ic('search')}<input id="sq" type="search" placeholder="${ja ? '検索' : 'Search'}" value="${esc(q)}" autocomplete="off">${ic('mic')}</label></lg-panel><button class="sx2 glass" data-sb="close" aria-label="Close">${ic('xmark')}</button></div><div class="slb">${left()}</div></aside>
-      <section class="sr"><div class="sbar"><lg-button class="sback" data-sb="back" aria-label="Back">${ic('chevl')}</lg-button><h1>${title(sec)}</h1><lg-button class="sx" data-sb="close" aria-label="Close">${ic('xmark')}</lg-button></div><div class="srb sbody">${sec !== 'profile' ? head(sec) : ''}${C[sec]()}</div></section></div>`;
+      <section class="sr"><div class="sbar"><lg-button class="sback" data-sb="back" aria-label="Back">${ic('chevl')}</lg-button><h1>${title(sec)}</h1><lg-button class="sx" data-sb="close" aria-label="Close">${ic('xmark')}</lg-button></div><div class="srb sbody${sec === 'about' ? ' hd' : ''}">${sec === 'about' ? head(sec) : ''}${C[sec]()}</div></section></div>`;
     if (keep && sc) $('.srb', el).scrollTop = sc;
     if (q) { const i = $('#sq', el); i.focus(); i.setSelectionRange(q.length, q.length); }
   };
@@ -1445,7 +1458,7 @@ function openSettings(start) {
     if (k === 'auto') { ST.auto = on ? 1 : 0; P.auto = !!ST.auto; save(); return; }
     if (k === 'auto2') { ST.ap = on ? 'auto' : (effDark() ? 'dark' : 'light'); save(); draw(true); return; }
     if (k === 'glass' || k === 'glassoff') { glassItem().act(); save(); draw(true); return; }
-    ST[k] = on ? 1 : 0; save();
+    ST[k] = on ? 1 : 0; save(); applyExtra();
   });
   el.addEventListener('click', async e => {
     const t0 = e.target;
@@ -1454,6 +1467,7 @@ function openSettings(start) {
     const ap = t0.closest('[data-ap]'); if (ap) { ST.ap = ap.dataset.ap; save(); draw(true); return; }
     const ac = t0.closest('[data-acc]'); if (ac) { ST.acc = ac.dataset.acc; save(); draw(true); return; }
     const d = t0.closest('[data-do]'); if (!d) return; const [a, v] = d.dataset.do.split(':');
+    if (a === 'go') { det = true; sec = v; draw(); return; }
     if (a === 'rate') { const r = +v; au.defaultPlaybackRate = r; au.playbackRate = r; au.preservesPitch = true; }
     else if (a === 'sleep') { if (v === 'end') { clearTimeout(sleepT); S.sleepEnd = true; toast(ja ? 'この曲の終わりで停止' : 'Stops at end of track'); } else setSleep(+v * 60); }
     else if (a === 'src') { S.src = v; LS.set('src', v); if (v !== 'lib') S.on = v; }
@@ -1673,7 +1687,15 @@ function rfInit() {
   (await idb.all()).forEach(x => lib.set(x.id, x));
   renderSidebar(); render(); ui();
   try { if (ST.resume) restoreResume(); } catch {}
-  if ('serviceWorker' in navigator && location.protocol.startsWith('http')) navigator.serviceWorker.register('sw.js').catch(() => {});
+  if ('serviceWorker' in navigator && location.protocol.startsWith('http')) {
+    // v50: 新しいSWが有効になったら一度だけ再読み込み。起動・復帰のたびに更新を確認する
+    const hadSW = !!navigator.serviceWorker.controller; let reloaded = false;
+    navigator.serviceWorker.addEventListener('controllerchange', () => { if (hadSW && !reloaded) { reloaded = true; location.reload(); } });
+    navigator.serviceWorker.register('sw.js', { updateViaCache: 'none' }).then(reg => {
+      const check = () => reg.update().catch(() => {});
+      check(); document.addEventListener('visibilitychange', () => { if (!document.hidden) check(); });
+    }).catch(() => {});
+  }
   if (navigator.storage && navigator.storage.persist) navigator.storage.persist().catch(() => {});
 })();
 

@@ -1,4 +1,4 @@
-const CACHE = 'music-pwa-v49';
+const CACHE = 'music-pwa-v50';
 const ASSETS = ['./', 'index.html', 'style.css', 'app.js', 'lib/components.js', 'lib/liquid-glass.js', 'img/apple-park.jpg', 'manifest.webmanifest', 'icons/icon-192.png', 'icons/icon-512.png', 'icons/apple-touch-icon.png'];
 self.addEventListener('install', e => {
   e.waitUntil(caches.open(CACHE).then(c => c.addAll(ASSETS).catch(() => {})).then(() => self.skipWaiting()));

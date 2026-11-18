@@ -1058,3 +1058,99 @@ lg-slider input[type=range]::-webkit-slider-thumb{width:36px;height:36px}
 .lgc .ic{width:21px;height:21px}
 #settings .shead .sico{width:60px;height:60px;font-size:40px;border-radius:15px}
 #settings .srb{padding-top:35px}
+
+/* ===== v50: iPadの実機スクショ(外観/Liquid Glass/一般/情報)とiPhoneのミュージック設定に寸法・色を合わせる(単位はpt) ===== */
+@media(prefers-color-scheme:dark){:root{--slbg:#191e21;--slhl:#13a4ff;--slsep:#38383b;--tile:#171717;--lg-track-off:#58585d;--lg-track:#333335}}
+@media(prefers-color-scheme:light){:root{--slbg:#eef0f3;--slhl:#0a84ff;--slsep:rgba(60,60,67,.18);--tile:#f2f2f7;--lg-track-off:#e9e9eb;--lg-track:#d1d1d6}}
+:root{--lg-on:#30d158;--lg-accent:#0091ff;--lg-focus:#0a84ff}
+/* 下部の余白対策: 高さは親いっぱい(inset:0)。固定px/古いinnerHeightに頼らない */
+html,body,#app{height:100%}
+
+/* ---- サイドバー(340pt) ---- */
+#settings .sl{width:340px;background:var(--slbg);border-right:0}
+#settings .slh{padding:86px 16px 11px;display:block;border-bottom:.5px solid var(--slsep)}
+#settings .sfieldp{display:block;height:37px;border-radius:99px;background:rgba(255,255,255,.16);-webkit-backdrop-filter:blur(20px) saturate(160%);backdrop-filter:blur(20px) saturate(160%);box-shadow:inset 0 .5px 0 rgba(255,255,255,.3),inset 0 -.5px 0 rgba(0,0,0,.2),0 1px 6px rgba(0,0,0,.25)}
+#settings .sfieldp .lg-panel__body{height:100%;display:flex;align-items:center}
+#settings .sfield{flex:1;min-width:0;height:100%;display:flex;align-items:center;gap:9px;padding:0 14px 0 13px;border-radius:99px;color:rgba(235,235,245,.6);font-size:13px;background:none}
+#settings .sfield .ic{width:14px;height:14px;flex:none}
+#settings .sfield input{font-size:13px;flex:1;min-width:0;color:#fff}
+#settings .sfield input::placeholder{color:rgba(235,235,245,.6)}
+#settings .slb{padding:11px 16px 40px}
+#settings .sprof{display:flex;align-items:center;gap:10px;width:100%;height:58px;margin:11px 0 20px;padding:0 0 0 16px;background:none;border-radius:0;text-align:left}
+#settings .sprof .avatar{width:58px;height:58px;border-radius:50%;display:grid;place-items:center;flex:none;font-size:28px;color:#8e8e93;background:radial-gradient(circle at 50% 35%,#34343a,#1c1c1e);box-shadow:inset 0 0 0 1px rgba(255,255,255,.12)}
+#settings .sprof b{display:block;font-size:17px;font-weight:600;line-height:20px;color:var(--fg)}
+#settings .sprof small{display:block;font-size:11px;line-height:14px;color:var(--fg2);margin-top:2px}
+#settings .slg{margin-bottom:10px}
+#settings .sli{height:48.5px;margin:0 0 1px;padding:0 12.5px;gap:6px;border-radius:22px;font-size:13px;font-weight:400;color:var(--fg)}
+#settings .sli.on{background:var(--slhl);color:#fff}
+#settings .sico{width:28px;height:28px;border-radius:6.5px;background:var(--tile);box-shadow:inset 0 0 0 .5px rgba(255,255,255,.06);font-size:20px;color:var(--g);display:grid;place-items:center;flex:none}
+#settings .sico .ic{width:20px;height:20px}
+
+/* ---- 詳細ペイン(タイトル17pt・グループ見出し13pt・カード角26pt) ---- */
+#settings .sr .sbar{height:auto;padding:calc(42px + var(--sat)) 0 0;justify-content:center;align-items:flex-start}
+#settings .sr .sbar h1{visibility:visible;font-size:17px;font-weight:600;line-height:22px;margin:0;color:var(--fg)}
+#settings .sr .sx{top:calc(var(--sat) + 29px);right:20px}
+#settings .srb{padding:33px max(20px,calc((100% - 800px)/2)) 70px}
+#settings .srb.hd{padding-top:57px}
+#settings .sgh{font-size:13px;font-weight:500;line-height:16px;color:var(--fg2);margin:0 20px 10px}
+#settings .sgp{border-radius:26px;padding:0 20px;margin:0;background:var(--scard)}
+#settings .sgp + .sgp{margin-top:35px}
+#settings .sft + .sgp,#settings .sgp + .sft{margin-top:0}
+#settings .sft + .sgp{margin-top:22px}
+#settings .sft + .sgh,#settings .sgp + .sgh{margin-top:28px}
+#settings .sft{font-size:12px;line-height:16px;margin:8px 20px 0;color:var(--fg2)}
+#settings .lnkb{color:#0a84ff;background:none;border:0;padding:0;font:inherit;font-size:12px;cursor:pointer}
+#settings .srw{min-height:49.5px;font-size:13px;gap:8px;padding:0}
+#settings .srw + .srw{border-top:.5px solid var(--slsep)}
+#settings .srw em{font-size:13px;font-style:normal;color:var(--fg2)}
+#settings .srw b{color:#8e8e93;font-size:11px}
+#settings lg-switch{flex:none}
+
+/* ---- 外観モード ---- */
+#settings .apr{display:flex;justify-content:center;gap:184px;padding:31px 0}
+#settings .apo{display:flex;flex-direction:column;align-items:center;width:104px;background:none;border:0;padding:0;color:var(--fg);font:inherit;cursor:pointer}
+#settings .pv{position:relative;display:block;width:104px;height:150px;border-radius:20px;overflow:hidden;box-shadow:inset 0 0 0 .5px rgba(255,255,255,.12)}
+#settings .pv.light{background:radial-gradient(120% 70% at 25% 15%,#fbf7f1 0 25%,transparent 60%),linear-gradient(165deg,#e4d3bf 0%,#f1ebe3 42%,#b9c6d6 100%)}
+#settings .pv.dark{background:radial-gradient(120% 70% at 75% 20%,#4a5480 0 22%,transparent 58%),linear-gradient(165deg,#1d2338 0%,#3c4466 48%,#0c101f 100%)}
+#settings .pv b{position:absolute;left:0;right:0;top:8px;text-align:center;font-size:23px;line-height:27px;font-weight:600;color:#fff;letter-spacing:.3px}
+#settings .pv i{position:absolute;left:15px;width:72px;height:14.5px;border-radius:8px;background:rgba(255,255,255,.34)}
+#settings .pv i:nth-of-type(1){top:41px}
+#settings .pv i:nth-of-type(2){top:58px}
+#settings .apl{display:block;margin-top:8px;font-size:13px;line-height:16px;color:var(--fg)}
+#settings .rd{display:grid;place-items:center;width:14px;height:14px;margin-top:10px;border-radius:50%;box-sizing:border-box;border:1.2px solid #8e8e94;color:#fff}
+#settings .rd.on{background:#0a84ff;border-color:#0a84ff}
+#settings .rd .ic{width:9px;height:9px}
+#settings .apc > .srw{border-top:.5px solid var(--slsep)}
+
+/* ---- Liquid Glass ---- */
+#settings .lgpv{width:510px;max-width:100%;margin:0 auto;border-radius:35px;overflow:hidden;background:#1f1d1b;box-shadow:0 0 0 .5px rgba(255,255,255,.06)}
+#settings .lgim{position:relative;height:188px;background:url("img/apple-park.jpg") center/cover no-repeat #1c1c1e}
+#settings .lgbar{position:absolute;left:14px;right:14px;top:16px;display:flex;justify-content:flex-end;align-items:center;gap:14px}
+#settings .lgc{width:48px;height:46px;flex:none}
+#settings .lgc .lg-button__el{width:48px;height:46px;min-height:0;padding:0;border-radius:50%;display:grid;place-items:center;color:#fff;font-size:20px}
+#settings .lgc .ic{width:21px;height:21px}
+#settings .lgs{flex:0 0 289px;width:289px;height:46px;border-radius:99px;background:rgba(255,255,255,.14);-webkit-backdrop-filter:blur(calc(var(--rfblur,1.2px) * 3 + 6px)) saturate(170%);backdrop-filter:blur(calc(var(--rfblur,1.2px) * 3 + 6px)) saturate(170%);box-shadow:inset 0 .5px 0 rgba(255,255,255,.35),inset 0 -.5px 0 rgba(0,0,0,.15),0 2px 10px rgba(0,0,0,.2)}
+#settings .lgs .lg-panel__body{height:100%;display:flex;align-items:center;padding:0 16px}
+#settings .lgsi{display:flex;align-items:center;gap:9px;color:rgba(255,255,255,.7);font-size:17px;width:100%}
+#settings .lgsi .ic{width:17px;height:17px;flex:none}
+#settings .lgtx{box-sizing:border-box;height:98px;padding:26px 17px 0}
+#settings .lgtx h3{margin:0;font-size:22px;line-height:26px;font-weight:600;color:#fff;letter-spacing:-.2px}
+#settings .lgtx p{margin:10px 0 0;font-size:22px;line-height:22px;color:rgba(255,255,255,.5)}
+#settings .lgsl{height:52px;border-radius:26px;padding:0 19.5px 0 17.5px;display:flex;align-items:center;gap:10px;box-sizing:border-box;margin-top:22px}
+#settings .lgsl lg-slider{flex:1;min-width:0}
+#settings .lgsl .ic{width:17px;height:17px;flex:none;color:#8e8e93}
+
+/* ---- 情報(一般と同じ見出しカード) ---- */
+#settings .shead{display:flex;flex-direction:column;align-items:flex-start;padding:15px 20px 16px;background:var(--scard);border-radius:26px;margin:0 0 35px}
+#settings .shead .sico{width:60px;height:60px;border-radius:15px;font-size:38px;background:linear-gradient(#242427,#17171a);box-shadow:inset 0 0 0 .5px rgba(255,255,255,.08);color:var(--g)}
+#settings .shead .sico .ic{width:38px;height:38px}
+#settings .shead h2{font-size:17px;font-weight:600;line-height:22px;margin:20px 0 0}
+#settings .shead p{font-size:13px;line-height:17.5px;color:var(--fg2);margin:9px 0 0}
+
+/* v50 fix-up: タイトルバーの12px上マージンを除去、外観のサムネ間隔(.apo gap)を解消、各カードの縦位置を実寸(ラベル96pt/カード121pt)に合わせる */
+#settings .sr .sbar{margin:0}
+#settings .srb{padding-top:32px}
+#settings .srb.hd{padding-top:57px}
+#settings .lgpv{margin-top:25px}
+#settings .lgsl{margin-top:26px}
+#settings .apo{gap:0}
