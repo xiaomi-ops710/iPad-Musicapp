@@ -234,7 +234,7 @@ input[type=range]::-moz-range-thumb{width:0;height:0;border:0}
 }
 
 /* ===== メニュー / ダイアログ / トースト ===== */
-#menu{position:fixed;z-index:80;min-width:230px;max-width:300px;border-radius:22px;padding:6px;opacity:0;pointer-events:none;transform:scale(.85);transform-origin:var(--ox,50%) var(--oy,0%);transition:opacity .2s,transform .4s var(--spring)}
+#menu{position:fixed;z-index:80;min-width:230px;max-width:300px;border-radius:22px;padding:6px;opacity:0;pointer-events:none;transform:scale(.85);transform-origin:var(--ox,50%) var(--oy,0%);transition:none}
 #menu.show{opacity:1;pointer-events:auto;transform:none}
 #menu button{display:flex;align-items:center;gap:12px;width:100%;padding:11px 14px;border-radius:14px;font-size:17px;text-align:left}
 #menu button .ic{font-size:19px;width:22px;color:var(--fg)}
@@ -834,8 +834,6 @@ body.phone #np.mode-lyrics .nptitle .ib::before,body.phone #np.mode-queue .nptit
 .tl>.tr:nth-child(2){animation-delay:.03s}.tl>.tr:nth-child(3){animation-delay:.06s}.tl>.tr:nth-child(4){animation-delay:.09s}.tl>.tr:nth-child(5){animation-delay:.12s}.tl>.tr:nth-child(6){animation-delay:.15s}.tl>.tr:nth-child(n+7){animation-delay:.18s}
 .hs>*,.tl .tr{transition:transform .35s var(--spring),background .2s}
 .hs>*:active{transform:scale(.95)}.tl .tr:active{transform:scale(.98)}
-#menu.show button,#menu.show .mrow{animation:fadeup .4s var(--spring) backwards}
-#menu.show>*:nth-child(2){animation-delay:.03s}#menu.show>*:nth-child(3){animation-delay:.06s}#menu.show>*:nth-child(4){animation-delay:.09s}#menu.show>*:nth-child(5){animation-delay:.12s}#menu.show>*:nth-child(n+6){animation-delay:.15s}
 #np.open .nptitle,#np.open .times,#np.open .npbtns,#np.open .vol,#np.open .npfoot{animation:fadeup .6s var(--spring) backwards}
 #np.open .times{animation-delay:.05s}#np.open .npbtns{animation-delay:.1s}#np.open .vol{animation-delay:.15s}#np.open .npfoot{animation-delay:.2s}
 .npbtns .ib,.npfoot button,.npmodes button{transition:transform .35s var(--spring),background .3s,color .3s,opacity .3s}
@@ -967,3 +965,96 @@ html.lt .tblens{box-shadow:0 10px 22px rgba(0,0,0,.12)!important}
 .lyoff button:active{transform:scale(.94)}
 .lyoff span{min-width:58px;text-align:center;font-size:14px;font-weight:600;color:#fff;font-variant-numeric:tabular-nums}
 #np.mode-lyrics.lyon .lyoff{display:flex}
+
+/* ===== v47: iPadOS設定の見た目 + Liquid Glass 風コントロール ===== */
+@media(prefers-color-scheme:dark){
+  #settings .sl{background:rgba(28,28,30,.72);-webkit-backdrop-filter:blur(40px) saturate(180%);backdrop-filter:blur(40px) saturate(180%)}
+}
+#settings .sl{border-right:0}
+#settings .sli{height:52px;border-radius:14px;font-size:18px;gap:14px}
+#settings .sli.on{background:rgba(120,120,128,.26)}
+#settings .sico{width:40px;height:40px;border-radius:10px;font-size:24px}
+.srw{min-height:50px;font-size:17px}
+/* トグル: ガラスのノブ(上面の光沢・縁の陰影)、押下で横に伸びる */
+.tgl{width:60px;height:36px;border-radius:18px;background:rgba(120,120,128,.36);box-shadow:inset 0 1px 2px rgba(0,0,0,.2);transition:background .35s}
+.tgl i{top:2px;left:2px;width:32px;height:32px;border-radius:16px;background:linear-gradient(#ffffff,#f1f1f4);box-shadow:0 3px 8px rgba(0,0,0,.3),0 0 0 .5px rgba(0,0,0,.08),inset 0 1px 0 #fff;transition:transform .45s var(--spring),width .2s}
+.tgl i::after{content:"";position:absolute;left:6px;right:6px;top:3px;height:9px;border-radius:9px;background:linear-gradient(rgba(255,255,255,.95),rgba(255,255,255,0));pointer-events:none}
+.tgl.on{background:#34c759}
+.tgl.on i{transform:translateX(24px)}
+.tgl:active i{width:40px}.tgl.on:active i{transform:translateX(16px)}
+/* セグメント: 凹んだトラックに、ガラスの選択面 */
+.sgp .seg2{background:rgba(118,118,128,.24);border-radius:11px;padding:2px}
+.sgp .seg2 button{height:36px;border-radius:9px;font-size:16px;font-weight:600;color:var(--fg);transition:background .3s,box-shadow .3s}
+.sgp .seg2 button.on{background:rgba(118,118,128,.6);box-shadow:inset 0 1px 0 rgba(255,255,255,.22),0 2px 6px rgba(0,0,0,.35)}
+@media(prefers-color-scheme:light){.sgp .seg2 button.on{background:#fff;box-shadow:0 2px 6px rgba(0,0,0,.18)}}
+/* スライダー: 白いピル型のノブ(ガラスの光沢)、塗りは白(本家の音量と同じ) */
+input.gs::-webkit-slider-runnable-track{height:6px;border-radius:3px;background:linear-gradient(90deg,#fff var(--p),rgba(120,120,128,.36) var(--p))}
+input.gs::-webkit-slider-thumb{width:40px;height:26px;border-radius:14px;margin-top:-10px;background:linear-gradient(#ffffff,#e8e8ee);box-shadow:0 3px 10px rgba(0,0,0,.35),inset 0 1px 0 #fff,0 0 0 .5px rgba(0,0,0,.08)}
+input.gs::-moz-range-track{height:6px;border-radius:3px;background:rgba(120,120,128,.36)}
+input.gs::-moz-range-progress{height:6px;border-radius:3px;background:#fff}
+input.gs::-moz-range-thumb{width:40px;height:26px;border-radius:14px;background:#f0f0f4;box-shadow:0 3px 10px rgba(0,0,0,.35)}
+/* ボタン行: 押下時の光沢 */
+.srw.act:active{background:rgba(120,120,128,.14)}
+
+/* ===== v48: components.js(Liquid Glass)を設定に適用 ===== */
+:root{--lg-accent:var(--fg);--lg-on:#34c759;--lg-track:rgba(120,120,128,.24);--lg-track-off:rgba(120,120,128,.36);--lg-text:var(--fg);--lg-text-muted:var(--fg2);--lg-surface:rgba(118,118,128,.55);--lg-focus:#0a84ff}
+@media(prefers-color-scheme:light){:root{--lg-surface:#ffffff}}
+#settings lg-switch{display:inline-flex;flex:none}
+.srw.srs lg-slider,.sgp lg-slider{display:block;flex:1;min-width:0;width:auto}
+lg-slider input[type=range]::-webkit-slider-thumb{width:36px;height:36px}
+.sgp lg-segmented{display:flex;width:100%;padding:3px;border-radius:11px;box-sizing:border-box}
+.sgp lg-segmented .lg-seg__option{flex:1;min-width:0;height:36px;line-height:36px;font-size:16px;font-weight:600;border-radius:9px}
+.sx,.sback{border-radius:50%}
+.sx .lg-button__el,.sback .lg-button__el{width:48px;height:48px;min-height:0;padding:0;border-radius:50%;font-size:20px}
+
+/* ===== v49: 実機スクショ(サウンド/一般)の寸法・色に合わせる ===== */
+@media(prefers-color-scheme:dark){:root{--slbg:#191e21;--slhl:rgba(255,255,255,.09);--slsep:#353c3f}}
+@media(prefers-color-scheme:light){:root{--slbg:#eef0f3;--slhl:rgba(120,120,128,.14);--slsep:rgba(60,60,67,.14)}}
+#settings .sl{width:340px;background:var(--slbg);border-right:0}
+#settings .slh{display:flex;align-items:center;gap:10px;padding:calc(16px + var(--sat)) 16px 10px;border-bottom:.5px solid var(--slsep)}
+#settings .sfieldp{flex:1;min-width:0;height:37px;border-radius:99px;display:block}
+#settings .sfieldp .lg-panel__body{height:100%;display:flex;align-items:center}
+#settings .sfield{flex:1;min-width:0;height:100%;display:flex;align-items:center;gap:7px;padding:0 13px;border-radius:99px;color:var(--fg2);font-size:13px;background:none}
+#settings .sfield input{font-size:13px;flex:1;min-width:0}
+#settings .sfield .ic{width:14px;height:14px;flex:none}
+#settings .sfield input::placeholder{color:var(--fg2)}
+#settings .slb{padding:11px 16px 40px}
+#settings .sprof{padding:8px 10px;margin:0 0 10px;border-radius:14px;background:none}
+#settings .sprof .avatar{width:38px;height:38px;font-size:20px}
+#settings .sprof b{font-size:13px;font-weight:600}
+#settings .sprof small{font-size:12px}
+#settings .slg{margin-bottom:10px}
+#settings .sli{height:49.5px;width:100%;padding:0 12px;gap:6px;border-radius:10px;font-size:13px;font-weight:400}
+#settings .sli.on{background:var(--slhl)}
+#settings .sico{width:28px;height:28px;border-radius:7px;font-size:26px;background:none;box-shadow:none;color:var(--g)}
+#settings .sico .ic{font-size:26px}
+#settings .sr .sbar{height:70px}
+@media(min-width:721px){#settings .sr .sbar h1{visibility:hidden}}
+#settings .srb{padding:51px max(20px,calc((100% - 800px)/2)) 70px}
+.shead{display:flex;flex-direction:column;align-items:flex-start;padding:15px 20px 16px;background:var(--scard);border-radius:20px;margin:0 0 35px}
+.shead .sico{width:60px;height:60px;border-radius:15px;font-size:40px;background:#1d1d1f;color:var(--g);flex:none;display:grid;place-items:center}
+.shead .sico .ic{font-size:40px}
+.shead h2{font-size:17px;font-weight:600;line-height:22px;margin:20px 0 0}
+.shead p{font-size:13px;line-height:17.5px;color:var(--fg2);margin:9px 0 0}
+#settings .sgp{border-radius:20px;padding:0 20px;margin:0}
+#settings .srw{min-height:49.5px;font-size:13px;gap:8px}
+#settings .srw em{font-size:13px}
+#settings .srw b{font-size:11px}
+#settings .sgh{font-size:13px;font-weight:400;color:var(--fg2);margin:30px 20px 7px}
+#settings .sft{font-size:12px;margin:8px 20px 0;line-height:1.4}
+#settings .srw.srs{min-height:49.5px}
+#settings .srw.srs>span{font-size:13px;width:90px}
+#settings .srw.srs lg-slider{flex:1}
+#settings lg-switch{width:63px;height:28px}
+/* Liquid Glass preview: 実写の写真 + 右上に並び替え/検索 */
+.lgim{height:176px;background:url("img/apple-park.jpg") center/cover no-repeat #1c1c1e}
+.lgbar{position:absolute;left:16px;right:16px;top:16px;display:flex;gap:12px;justify-content:flex-end;align-items:center;padding:0}
+.lgs{flex:0 1 250px;width:250px;height:46px;border-radius:99px;display:block}
+.lgs .lg-panel__body{height:100%;display:flex;align-items:center;padding:0 16px}
+.lgsi{display:flex;align-items:center;gap:10px;color:#fff;font-size:17px;width:100%}
+.lgsi .ic{width:18px;height:18px}
+.lgc{width:46px;height:46px;flex:none}
+.lgc .lg-button__el{width:46px;height:46px;min-height:0;padding:0;border-radius:50%;font-size:20px;color:#fff;display:grid;place-items:center}
+.lgc .ic{width:21px;height:21px}
+#settings .shead .sico{width:60px;height:60px;font-size:40px;border-radius:15px}
+#settings .srb{padding-top:35px}
